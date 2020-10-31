@@ -1,9 +1,10 @@
 # Wave Function Collapse
 
 Single-file Wave Function Collapse library / command-line tool in C.
+
 v.0.1 (pre-alpha)
 
-The library / command-line tool currently requires raylib.
+The library / command-line tool currently require raylib.
 
 ## Use as a library
 
@@ -14,8 +15,8 @@ One file in your project should include wfc.c like this:
   #include "wfc.c"
 ```
 
-Other files in the project can also include wfc.c and use its functionality but
-they shouldn't define WFC_IMPLEMENTATION macro.
+Other files in the project can also include `wfc.c` and use its functionality but
+they shouldn't define `WFC_IMPLEMENTATION` macro.
 
 **Usage example:**
 
@@ -47,6 +48,6 @@ make
 
 Run `wfc.c` to see available options.
 
-At the moment the build has been configured / tested for a Mac.
+At the moment the build has been configured / tested on a Mac.
 
 # Gallery
