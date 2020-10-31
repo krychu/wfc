@@ -46,7 +46,7 @@ make
 ./wfc
 ```
 
-Run `wfc.c` to see available options.
+Run `./wfc` to see available options.
 
 At the moment the build has been configured / tested on a Mac.
 
