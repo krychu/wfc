@@ -55,14 +55,17 @@
 //
 // Log
 // -----------------------------------------------------------------------------
+// + (09.11.2020) Remove raylib dep, stb option, overlapping+tiled api prep
 // + (31.10.2020) Command-line tool
 // + (30.10.2020) Pre-alpha version
 //
+// - Update doc and tool help
 // - Remove asserts when used as a lib
 // - Handle failures in tile gen (e.g., 0 allowed neigbours)
 // - Print seed in the summary
 // - Add seed as an option
-// - Remove dependencies
+// - Add option for 'next_cell' that picks cell based on min_tile_cnt
+// - Add option for 'collapse' that uni-randomly picks the tile
 //
 
 #ifndef WFC_H
@@ -228,6 +231,46 @@ void wfc__print_props(struct wfc__prop *p, int prop_cnt, const char *prefix) {
 // Img helpers
 //
 
+#ifndef WFC_NO_STB
+
+// non-0 on success, 0 on failure
+int wfc_img_save(struct wfc_image *image, const char *filename)
+{
+  int len = strlen(filename);
+  char extension[5];
+
+  if (len < 4)
+    goto UNKNOWNFORMAT;
+
+  strcpy(extension, filename-4);
+  for (int i=0; i<4; i++)
+    extension[i] = tolower(extension[i]);
+
+  if (strcmp(extension, ".png")==0)
+    return stbi_write_png(filename, image->width, image->height, image->component_cnt, image->data, image->width * image->component_cnt);
+  else if (strcmp(extension, ".bmp")==0)
+    return stbi_write_bmp(filename, image->width, image->height, image->component_cnt, image->data);
+  else if (strcmp(extension, ".tga")==0)
+    return stbi_write_tga(filename, image->width, image->height, image->component_cnt, image->data);
+  else if (strcmp(extension, ".jpg")==0)
+    return stbi_write_jpg(filename, image->width, image->height, image->component_cnt, image->data, 100);
+
+ UNKNOWNFORMAT:
+  printf("error: wfc_imgsave - unknown format (%s)\n", filename);
+  return 0;
+}
+
+struct wfc_image *wfc_img_load(const char *filename)
+{
+  struct wfc_image *image = malloc(sizeof(*image));
+  wfcassert(image != NULL);
+  image->data = stbi_load(filename, &image->width, &image->height, &image->component_cnt, 0);
+  wfcassert(image->data != NULL);
+  return image;
+}
+
+#endif
+
 struct wfc_image *wfc_img_copy(struct wfc_image *image) {
   struct wfc_image *copy = malloc(sizeof(*copy));
   wfcassert(copy!=NULL);
@@ -260,7 +303,7 @@ void wfc_img_destroy(struct wfc_image *image) {
 }
 
 // This is a generic function but it's only used by the overlapping method
-struct wfc_image *wfc__imgexpand(struct wfc_image *image, int xexp, int yexp) {
+struct wfc_image *wfc__img_expand(struct wfc_image *image, int xexp, int yexp) {
   struct wfc_image *exp_image = wfc_img_create(image->width + xexp, image->height + yexp, image->component_cnt);
 
   for (int y=0; y<exp_image->height; y++) {
@@ -397,6 +440,11 @@ int wfc__img_cmp(struct wfc_image *a, struct wfc_image *b) {
   return memcmp(a->data, b->data, a->width*a->height*a->component_cnt) == 0;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// WFC: Utils (Method-independent)
+//
+
 int wfc__nofunc_int(const char *func_name, const char *msg, ...)
 {
   printf("%s: %s\n", func_name, msg);
@@ -411,51 +459,7 @@ void *wfc__nofunc_ptr(const char *func_name, const char *msg, ...)
 
 #ifndef WFC_NO_STB
 
-// non-0 on success, 0 on failure
-int wfc_img_save(struct wfc_image *image, const char *filename)
-{
-  int len = strlen(filename);
-  char extension[5];
-
-  if (len < 4)
-    goto UNKNOWNFORMAT;
-
-  strcpy(extension, filename-4);
-  for (int i=0; i<4; i++)
-    extension[i] = tolower(extension[i]);
-
-  if (strcmp(extension, ".png")==0)
-    return stbi_write_png(filename, image->width, image->height, image->component_cnt, image->data, image->width * image->component_cnt);
-  else if (strcmp(extension, ".bmp")==0)
-    return stbi_write_bmp(filename, image->width, image->height, image->component_cnt, image->data);
-  else if (strcmp(extension, ".tga")==0)
-    return stbi_write_tga(filename, image->width, image->height, image->component_cnt, image->data);
-  else if (strcmp(extension, ".jpg")==0)
-    return stbi_write_jpg(filename, image->width, image->height, image->component_cnt, image->data, 100);
-
- UNKNOWNFORMAT:
-  printf("error: wfc_imgsave - unknown format (%s)\n", filename);
-  return 0;
-}
-
-struct wfc_image *wfc_img_load(const char *filename)
-{
-  struct wfc_image *image = malloc(sizeof(*image));
-  wfcassert(image != NULL);
-  image->data = stbi_load(filename, &image->width, &image->height, &image->component_cnt, 0);
-  wfcassert(image->data != NULL);
-  return image;
-}
-
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
-//
-// WFC
-//
-
-#ifndef WFC_NO_STB
-
+// TODO: This is not shared code, it is specific to overlapping method
 // dep: stb
 void wfc_export(struct wfc *wfc, const char *filename)
 {
@@ -496,42 +500,6 @@ void wfc_export_tiles(struct wfc *wfc, const char *path)
 }
 
 #endif
-
-// TODO: move outside img helpers
-void wfc__create_allowed_tiles(struct wfc__tile *tiles, int tile_cnt) {
-  int directions[4] = {WFC_UP,WFC_DOWN,WFC_LEFT,WFC_RIGHT};
-
-  for (int d_idx=0; d_idx<4; d_idx++) {
-    enum wfc__direction d = directions[d_idx];
-
-    for (int i=0; i<tile_cnt; i++) {
-
-      struct wfc__tile *t = &( tiles[i] );
-      t->allowed_tiles[d] = malloc(sizeof(*(tiles[i].allowed_tiles[d])) * tile_cnt);
-      t->allowed_tile_cnt[d] = 0;
-      assert(t->allowed_tiles[d]);
-
-      for (int j=0; j<tile_cnt; j++) {
-        /* if (i==j) { */
-        /*   continue; */
-        /* } */
-
-        if (wfc__img_cmpoverlap(tiles[i].image, tiles[j].image, d)) {
-          t->allowed_tiles[d][ t->allowed_tile_cnt[d] ] = j;
-          t->allowed_tile_cnt[d]++;
-        }
-      }
-    }
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//
-// Shared utils
-//
-// TODO: there are other img helpers outside this section
-// TODO: REMOVE THIS
-
 
 // flip_direction: 0 - horizontal, 1 vertical
 void wfc__add_flipped_tiles(struct wfc__tile **tiles, int *tile_cnt, int flip_direction)
@@ -602,10 +570,6 @@ struct wfc_image *create_tile_image(struct wfc_image *image, int x, int y, int t
   tile_image->height = tile_height;
   tile_image->component_cnt = image->component_cnt;
 
-  //WRONG!
-  /* stbi_write_png("tmp/test.png", image->width, image->height, image->component_cnt, image->data, image->width * image->component_cnt); */
-  /* exit(1); */
-
   for (int i=0; i<tile_height; i++) {
     memcpy(&tile_image->data[i * tile_width * image->component_cnt],
            &image->data[(y+i) * image->width * image->component_cnt + x * image->component_cnt],
@@ -617,86 +581,8 @@ struct wfc_image *create_tile_image(struct wfc_image *image, int x, int y, int t
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Overlapping method
+// WFC: Solve (Method-independent)
 //
-
-struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
-                                                int tile_width,
-                                                int tile_height,
-                                                int expand_image,
-                                                int xflip_tiles,
-                                                int yflip_tiles,
-                                                int rotate_tiles,
-                                                int *tile_cnt)
-{
-
-  int width = image->width - tile_width + 1;
-  int height = image->height - tile_height + 1;
-
-  if (expand_image) {
-    width = image->width;
-    height = image->height;
-    image = wfc__imgexpand(image, tile_width-1, tile_height-1);
-  }
-
-  *tile_cnt = width * height;
-
-  struct wfc__tile *tiles = malloc(sizeof(*tiles) * (*tile_cnt));
-  assert(tiles!=NULL);
-
-  for (int y=0; y<height; y++) {
-    for (int x=0; x<width; x++) {
-      struct wfc__tile *tile = &( tiles[y*width + x] );
-      tile->image = create_tile_image(image, x, y, tile_width, tile_height);
-      //tile->allowed_tiles = NULL;
-      tile->freq = 1;
-    }
-  }
-
-  if (xflip_tiles) wfc__add_flipped_tiles(&tiles, tile_cnt, 0);
-  if (yflip_tiles) wfc__add_flipped_tiles(&tiles, tile_cnt, 1);
-  if (rotate_tiles) wfc__add_rotated_tiles(&tiles, tile_cnt);
-
-  wfc__remove_duplicate_tiles(&tiles, tile_cnt);
-  wfc__create_allowed_tiles(tiles, *tile_cnt);
-
-  // If expand_image is set it means we've created a new image which
-  // now needs to be destroyed
-  if (expand_image) {
-    wfc_img_destroy(image);
-  }
-
-  return tiles;
-}
-
-// -1 if generation was unsuccessful (probably contradiction encountered)
-//  0 on success
-//
-// collapse_cnt can be used to restrict the max number of collapses. -1
-// removes any restriction
-void wfc__init_cells(struct wfc *wfc)
-{
-  int sum_freqs = 0;
-  int sum_log_freqs = 0;
-  for (int i=0; i<wfc->tile_cnt; i++) {
-    int freq = wfc->tiles[i].freq;
-    sum_freqs += freq;
-    sum_log_freqs += freq * log(freq);
-  }
-  double entropy = log(sum_freqs) - sum_log_freqs/sum_freqs;
-
-  for (int i=0; i<wfc->cell_cnt; i++) {
-    wfc->cells[i].tile_cnt = wfc->tile_cnt;
-    wfc->cells[i].sum_freqs = sum_freqs;
-    wfc->cells[i].sum_log_freqs = sum_log_freqs;
-    wfc->cells[i].entropy = entropy;
-    for (int j=0; j<wfc->tile_cnt; j++) {
-      wfc->cells[i].tiles[j] = j;
-    }
-  }
-
-  wfc->prop_cnt = 0;
-}
 
 struct wfc__prop *wfc__create_props(int cell_cnt) {
   struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * 10);
@@ -727,59 +613,6 @@ void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt) {
   free(cells);
 }
 
-struct wfc *wfc_overlapping(int output_width,
-                            int output_height,
-                            struct wfc_image *image,
-                            int tile_width,
-                            int tile_height,
-                            int expand_input,
-                            int xflip_tiles,
-                            int yflip_tiles,
-                            int rotate_tiles)
-{
-  struct wfc *wfc = malloc(sizeof(*wfc));
-  assert(wfc!=NULL);
-
-  wfc->type = WFC_TYPE_OVERLAPPING;
-  wfc->image = image;
-  wfc->output_width = output_width;
-  wfc->output_height = output_height;
-  wfc->cell_cnt = output_width * output_height;
-  wfc->tile_width = tile_width;
-  wfc->tile_height = tile_height;
-  wfc->tile_cnt = -1; // This is set by wfc__create_tiles_overlapping below
-  wfc->expand_input = expand_input;
-  wfc->xflip_tiles = xflip_tiles;
-  wfc->yflip_tiles = yflip_tiles;
-  wfc->rotate_tiles = rotate_tiles;
-  wfc->seed = 1234;
-  // use entropy
-  // ...
-
-  wfc->tiles = wfc__create_tiles_overlapping(wfc->image,
-                                             wfc->tile_width,
-                                             wfc->tile_height,
-                                             wfc->expand_input,
-                                             wfc->xflip_tiles,
-                                             wfc->yflip_tiles,
-                                             rotate_tiles,
-                                             &wfc->tile_cnt);
-  wfc->cells = wfc__create_cells(wfc->cell_cnt, wfc->tile_cnt);
-  wfc->props = wfc__create_props(wfc->cell_cnt);
-  //wfc->props = malloc(sizeof(*(wfc->props)) * wfc->cell_cnt * 10);
-  //wfcassert(wfc->props!=NULL);
-  wfc->prop_cnt = 0; // unnecessary
-
-  wfc__init_cells(wfc);
-
-  return wfc;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//
-// Method-independent
-//
-
 void wfc__destroy_allowed_tiles(struct wfc__tile *tiles, int tile_cnt) {
   for (int i=0; i<tile_cnt; i++) {
     int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
@@ -795,26 +628,6 @@ void wfc__destroy_tiles(struct wfc__tile *tiles, int tile_cnt) {
     wfc_img_destroy(tiles[i].image);
   }
   free(tiles);
-}
-
-// -1 if contradiction occurred
-//  0 on success
-int wfc__collapse(struct wfc *wfc, int cell_idx)
-{
-  int remaining = rand() % wfc->cells[cell_idx].sum_freqs;
-  for (int i=0; i<wfc->cells[cell_idx].tile_cnt; i++) {
-    int freq = wfc->tiles[ wfc->cells[cell_idx].tiles[i] ].freq;
-    if (remaining >= freq) {
-      remaining -= freq;
-    } else {
-      wfc->cells[cell_idx].tiles[0] = wfc->cells[cell_idx].tiles[i];
-      wfc->cells[cell_idx].tile_cnt = 1;
-      wfc->cells[cell_idx].entropy = 0;
-      return 0;
-    }
-  }
-
-  return -1;
 }
 
 void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
@@ -889,6 +702,7 @@ int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum wfc__dir
   return 0;
 }
 
+
 // Updates tiles in the destination cell to those that are allowed by the source cell
 // and propagate updates
 //
@@ -955,6 +769,26 @@ int wfc__propagate(struct wfc *wfc, int cell_idx) {
   return 0;
 }
 
+// -1 if contradiction occurred
+//  0 on success
+int wfc__collapse(struct wfc *wfc, int cell_idx)
+{
+  int remaining = rand() % wfc->cells[cell_idx].sum_freqs;
+  for (int i=0; i<wfc->cells[cell_idx].tile_cnt; i++) {
+    int freq = wfc->tiles[ wfc->cells[cell_idx].tiles[i] ].freq;
+    if (remaining >= freq) {
+      remaining -= freq;
+    } else {
+      wfc->cells[cell_idx].tiles[0] = wfc->cells[cell_idx].tiles[i];
+      wfc->cells[cell_idx].tile_cnt = 1;
+      wfc->cells[cell_idx].entropy = 0;
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
 int wfc__next_cell(struct wfc *wfc) {
   int min_idx = -1;
   double min_entropy = DBL_MAX;
@@ -967,6 +801,35 @@ int wfc__next_cell(struct wfc *wfc) {
   }
 
   return min_idx;
+}
+
+// -1 if generation was unsuccessful (probably contradiction encountered)
+//  0 on success
+//
+// collapse_cnt can be used to restrict the max number of collapses. -1
+// removes any restriction
+void wfc__init_cells(struct wfc *wfc)
+{
+  int sum_freqs = 0;
+  int sum_log_freqs = 0;
+  for (int i=0; i<wfc->tile_cnt; i++) {
+    int freq = wfc->tiles[i].freq;
+    sum_freqs += freq;
+    sum_log_freqs += freq * log(freq);
+  }
+  double entropy = log(sum_freqs) - sum_log_freqs/sum_freqs;
+
+  for (int i=0; i<wfc->cell_cnt; i++) {
+    wfc->cells[i].tile_cnt = wfc->tile_cnt;
+    wfc->cells[i].sum_freqs = sum_freqs;
+    wfc->cells[i].sum_log_freqs = sum_log_freqs;
+    wfc->cells[i].entropy = entropy;
+    for (int j=0; j<wfc->tile_cnt; j++) {
+      wfc->cells[i].tiles[j] = j;
+    }
+  }
+
+  wfc->prop_cnt = 0;
 }
 
 // TODO: corrent to 0 on success
@@ -999,19 +862,6 @@ int wfc_run(struct wfc *wfc, int max_collapse_cnt)
   return 0;
 }
 
-// This is called once after all options are set
-// TODO: error handling
-/* int wfc__runopts(struct wfc *wfc) { */
-/*   if (wfc->type == WFC_TYPE_OVERLAPPING) { */
-/*     wfc->tiles = wfc__create_tiles_overlapping(wfc->image, wfc->tile_width, wfc->tile_height, &(wfc->tile_cnt), wfc->expand_input, wfc->xflip_tiles, wfc->yflip_tiles, wfc->rotate_tiles); */
-/*   } else { */
-/*     printf("implement me\n"); */
-/*     exit(EXIT_FAILURE); */
-/*   } */
-/*   wfc->cells = wfc__create_cells(wfc->cell_cnt, wfc->tile_cnt); */
-/*   wfc->props = wfc__create_props(wfc->cell_cnt); */
-/* } */
-
 void wfc_destroy(struct wfc *wfc)
 {
   wfc__destroy_cells(wfc->cells, wfc->cell_cnt);
@@ -1019,6 +869,133 @@ void wfc_destroy(struct wfc *wfc)
   wfc__destroy_props(wfc->props);
   wfc_img_destroy(wfc->image);
   free(wfc);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// WFC: Overlapping method
+//
+
+void wfc__create_allowed_tiles(struct wfc__tile *tiles, int tile_cnt) {
+  int directions[4] = {WFC_UP,WFC_DOWN,WFC_LEFT,WFC_RIGHT};
+
+  for (int d_idx=0; d_idx<4; d_idx++) {
+    enum wfc__direction d = directions[d_idx];
+
+    for (int i=0; i<tile_cnt; i++) {
+
+      struct wfc__tile *t = &( tiles[i] );
+      t->allowed_tiles[d] = malloc(sizeof(*(tiles[i].allowed_tiles[d])) * tile_cnt);
+      t->allowed_tile_cnt[d] = 0;
+      assert(t->allowed_tiles[d]);
+
+      for (int j=0; j<tile_cnt; j++) {
+        /* if (i==j) { */
+        /*   continue; */
+        /* } */
+
+        if (wfc__img_cmpoverlap(tiles[i].image, tiles[j].image, d)) {
+          t->allowed_tiles[d][ t->allowed_tile_cnt[d] ] = j;
+          t->allowed_tile_cnt[d]++;
+        }
+      }
+    }
+  }
+}
+
+struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
+                                                int tile_width,
+                                                int tile_height,
+                                                int expand_image,
+                                                int xflip_tiles,
+                                                int yflip_tiles,
+                                                int rotate_tiles,
+                                                int *tile_cnt)
+{
+
+  int width = image->width - tile_width + 1;
+  int height = image->height - tile_height + 1;
+
+  if (expand_image) {
+    width = image->width;
+    height = image->height;
+    image = wfc__img_expand(image, tile_width-1, tile_height-1);
+  }
+
+  *tile_cnt = width * height;
+
+  struct wfc__tile *tiles = malloc(sizeof(*tiles) * (*tile_cnt));
+  assert(tiles!=NULL);
+
+  for (int y=0; y<height; y++) {
+    for (int x=0; x<width; x++) {
+      struct wfc__tile *tile = &( tiles[y*width + x] );
+      tile->image = create_tile_image(image, x, y, tile_width, tile_height);
+      //tile->allowed_tiles = NULL;
+      tile->freq = 1;
+    }
+  }
+
+  if (xflip_tiles) wfc__add_flipped_tiles(&tiles, tile_cnt, 0);
+  if (yflip_tiles) wfc__add_flipped_tiles(&tiles, tile_cnt, 1);
+  if (rotate_tiles) wfc__add_rotated_tiles(&tiles, tile_cnt);
+
+  wfc__remove_duplicate_tiles(&tiles, tile_cnt);
+  wfc__create_allowed_tiles(tiles, *tile_cnt);
+
+  // If expand_image is set it means we've created a new image which
+  // now needs to be destroyed
+  if (expand_image) {
+    wfc_img_destroy(image);
+  }
+
+  return tiles;
+}
+
+struct wfc *wfc_overlapping(int output_width,
+                            int output_height,
+                            struct wfc_image *image,
+                            int tile_width,
+                            int tile_height,
+                            int expand_input,
+                            int xflip_tiles,
+                            int yflip_tiles,
+                            int rotate_tiles)
+{
+  struct wfc *wfc = malloc(sizeof(*wfc));
+  assert(wfc!=NULL);
+
+  wfc->type = WFC_TYPE_OVERLAPPING;
+  wfc->image = image;
+  wfc->output_width = output_width;
+  wfc->output_height = output_height;
+  wfc->cell_cnt = output_width * output_height;
+  wfc->tile_width = tile_width;
+  wfc->tile_height = tile_height;
+  wfc->tile_cnt = -1; // This is set by wfc__create_tiles_overlapping below
+  wfc->expand_input = expand_input;
+  wfc->xflip_tiles = xflip_tiles;
+  wfc->yflip_tiles = yflip_tiles;
+  wfc->rotate_tiles = rotate_tiles;
+  wfc->seed = 1234;
+  // use entropy
+  // ...
+
+  wfc->tiles = wfc__create_tiles_overlapping(wfc->image,
+                                             wfc->tile_width,
+                                             wfc->tile_height,
+                                             wfc->expand_input,
+                                             wfc->xflip_tiles,
+                                             wfc->yflip_tiles,
+                                             rotate_tiles,
+                                             &wfc->tile_cnt);
+  wfc->cells = wfc__create_cells(wfc->cell_cnt, wfc->tile_cnt);
+  wfc->props = wfc__create_props(wfc->cell_cnt);
+  wfc->prop_cnt = 0; // unnecessary
+
+  wfc__init_cells(wfc);
+
+  return wfc;
 }
 
 #ifdef WFC_TOOL
@@ -1131,13 +1108,6 @@ void read_args(int argc, const char **argv, const char **input, const char **out
   };
 }
 
-/* int main(void) { */
-/*   struct wfc_image *image = wfc__img_load_png("tmp/1435.png"); */
-/*   image = wfc__img_rotate90(image, 3); */
-/*   wfc__img_save_png(image, "tmp/test3.png"); */
-/*   return 0; */
-/* } */
-
 int main(int argc, const char **argv) {
   const char *input_filename;
   const char *output_filename;
@@ -1175,33 +1145,18 @@ int main(int argc, const char **argv) {
                                     rotate_tiles);
 
   /* wfc_export_tiles(wfc, "tmp"); */
-  /* exit(1); */
   print_summary(wfc, input_filename, output_filename);
 
   wfc_run(wfc, -1);
-  /* stbi_write_png("tmp/test.png", wfc->image->width, wfc->image->height, wfc->image->component_cnt, wfc->image->data, wfc->image->width * wfc->image->component_cnt); */
-
   wfc_img_destroy(image);
   wfc_export(wfc, output_filename);
 
-  // or
-  /* image = wfc_imgoutput(wfc); */
-  /* wfc_imgsave(image, output_filename); */
-  /* wfc_imgdestroy(image); */
-
-  /* int *cells = wfc_output(wfc, &cell_cnt); */
-  /* //wfc_export_png(wfc, output_filename); */
-  /* wfc_destroy(wfc); */
-
-  /* wfc_rules(); */
-  /* wfc_allow(rules, 2, WFC_UP, 3); // 2 on top of 3 */
-
-  /* wfc_tiled(rules); */
   return 0;
 }
-#endif  // WFC_TOOL
 
-#endif
+#endif // WFC_TOOL
+
+#endif // WFC_IMPLEMENTATION
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -1223,34 +1178,6 @@ int main(int argc, const char **argv) {
 //   return min_idx;
 // }
 
-/* struct wfc *wfc_create(int width, int height, const char *tile_filename, int tile_width, int tile_height, int expand_image, int xflip_tiles, int yflip_tiles, int rotate_tiles) { */
-/*   struct wfc *wfc = malloc(sizeof(*wfc)); */
-/*   assert(wfc!=NULL); */
-
-/*   wfc->width = width; */
-/*   wfc->height = height; */
-/*   wfc->cell_cnt = width * height; */
-/*   wfc->tile_width = tile_width; */
-/*   wfc->tile_height = tile_height; */
-
-/*   wfc->tiles = wfc__create_tiles(tile_filename, tile_width, tile_height, &(wfc->tile_cnt), expand_image, xflip_tiles, yflip_tiles, rotate_tiles); */
-
-/*   wfc->cells = malloc(sizeof(*(wfc->cells)) * wfc->cell_cnt); */
-/*   assert(wfc->cells!=NULL); */
-/*   for (int i=0; i<wfc->cell_cnt; i++) { */
-/*     wfc->cells[i].tiles = malloc(sizeof(*(wfc->cells[i].tiles)) * wfc->tile_cnt); */
-/*     assert(wfc->cells[i].tiles); */
-/*   } */
-
-/*   wfc->props = malloc(sizeof(*(wfc->props)) * wfc->cell_cnt * 10); */
-/*   assert(wfc->props!=NULL); */
-/*   wfc->prop_cnt = 0; */
-
-/*   wfc_init(wfc); */
-
-/*   return wfc; */
-/* } */
-
 // TODO: Move to wfc as an option
 // void collapse(struct system *s, int cell_idx) {
 //   double _01 = (double)rand() / RAND_MAX;
@@ -1258,57 +1185,3 @@ int main(int argc, const char **argv) {
 //   s->cells[cell_idx].tiles[0] = s->cells[cell_idx].tiles[idx];
 //   s->cells[cell_idx].tile_cnt = 1;
 // }
-
-/* struct __wfc__tile *wfc__create_tiles_overlapping(unsigned char *image, int component_cnt, int width, int height, int tile_width, int tile_height, int *tile_cnt, int expand_image, int xflip_tiles, int yflip_tiles, int rotate_tiles) { */
-/*   Image image = LoadImage(filename); */
-
-/*   // TODO: Move to separate function */
-/*   if (expand_image) { */
-/*     Image image_ext = GenImageColor(image.width + tile_width-1, image.height + tile_height-1, RAYWHITE); */
-
-/*     Color *colors = GetImageData(image); */
-
-/*     for (int y=0; y<image_ext.height; y++) { */
-/*       for (int x=0; x<image_ext.width; x++) { */
-/*         int image_x = x % image.width; */
-/*         int image_y = y % image.height; */
-/*         ImageDrawPixel(&image_ext, x, y, colors[image_y * image.width + image_x]); */
-/*       } */
-/*     } */
-
-/*     free(colors); */
-/*     UnloadImage(image); */
-/*     image = image_ext; */
-/*   } */
-
-/*   int tile_xcnt = image.width - tile_width + 1; */
-/*   int tile_ycnt = image.height - tile_height + 1; */
-/*   *tile_cnt = tile_xcnt * tile_ycnt; */
-
-/*   struct wfc__tile *tiles = malloc(sizeof(*tiles) * (*tile_cnt)); */
-/*   assert(tiles != NULL); */
-
-/*   for (int y=0; y<tile_ycnt; y++) { */
-/*     for (int x=0; x<tile_xcnt; x++) { */
-/*       struct wfc__tile *tile = &( tiles[y*tile_ycnt + x] ); */
-/*       tile->image = ImageFromImage(image, (Rectangle){x, y, tile_width, tile_height}); */
-/*       tile->colors = GetImageData(tile->image); */
-/*       tile->freq = 1; */
-/*       assert(tile->colors); */
-/*     } */
-/*   } */
-
-/*   if (xflip_tiles) { */
-/*     wfc__add_flipped_tiles(&tiles, tile_cnt, 0); */
-/*   } */
-/*   if (yflip_tiles) { */
-/*     wfc__add_flipped_tiles(&tiles, tile_cnt, 1); */
-/*   } */
-/*   if (rotate_tiles) { */
-/*     wfc__add_rotated_tiles(&tiles, tile_cnt); */
-/*   } */
-/*   wfc__remove_duplicate_tiles(&tiles, tile_cnt); */
-/*   wfc__create_allowed_tiles(tiles, *tile_cnt); */
-
-/*   return tiles; */
-/* } */
