@@ -30,7 +30,7 @@
 //             input_image,     // Input image that will be cut into tiles
 //             3,               // Tile width in pixels
 //             3,               // Tile height in pixels
-//             1,               // Wrap input image on the right and bottom
+//             1,               // Expand input image on the right and bottom
 //             1,               // Add horizontal flips of all tiles
 //             1,               // Add vertical flips of all tiles
 //             1                // Add n*90deg rotations of all tiles
@@ -57,9 +57,7 @@
 // The output image will have the same number of components as the input
 // image.
 //
-// wfc_run can result in failure if it cannot find a solution. In such
-// a case the function returns 0. You can attempt to search for a new
-// solution:
+// wfc_run returns 0 if it cannot find a solution. You can try again like so:
 //
 //         wfc_init(wfc);
 //         wfc_run(wfc, -1);
@@ -69,8 +67,7 @@
 // ----------------------------------------
 //
 // khuwfc can optionally use stb_image.h and stb_write.h to provide
-// convenience functions for working directly with image files instead
-// of struct wfc_image.
+// convenience functions for working directly with image files.
 //
 // You will normally place stb_image.h and stb_write.h in the same
 // directory as wfc.h and include their implementations in one of the

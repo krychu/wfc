@@ -12,7 +12,7 @@ best sent by email. Thanks.
 
 ## HOW TO USE THE LIBRARY
 
-One file in your project should include wfc.h like this:
+One file in your project should include `wfc.h` like this:
 
 ```c
         #define WFC_IMPLEMENTATION
@@ -20,7 +20,7 @@ One file in your project should include wfc.h like this:
 ```
 
 Other files can also include and use `wfc.h` but they shouldn't define
-`WFC_IMPLEMENTATION`` macro.
+`WFC_IMPLEMENTATION` macro.
 
 Usage:
 
@@ -31,7 +31,7 @@ Usage:
             input_image,     // Input image that will be cut into tiles
             3,               // Tile width in pixels
             3,               // Tile height in pixels
-            1,               // Wrap input image on the right and bottom
+            1,               // Expand input image on the right and bottom
             1,               // Add horizontal flips of all tiles
             1,               // Add vertical flips of all tiles
             1                // Add n*90deg rotations of all tiles
@@ -45,7 +45,7 @@ Usage:
         // wfc_img_destroy(output_image);
 ```
 
-By default you work with struct wfc_image for inputs and outputs.
+By default you work with `struct wfc_image` for inputs and outputs.
 
 ```c
         struct wfc_image {
@@ -56,14 +56,12 @@ By default you work with struct wfc_image for inputs and outputs.
          }
 ```
 
-Data is tightly packed without padding. Each pixel consists of
-component_cnt components (e.g., four components for rgba format).
+`data` is tightly packed without padding. Each pixel consists of
+`component_cnt` components (e.g., four components for rgba format).
 The output image will have the same number of components as the input
 image.
 
-wfc_run can result in failure if it cannot find a solution. In such
-a case the function returns 0. You can attempt to search for a new
-solution with a new seed:
+`wfc_run` returns 0 if it cannot find a solution. You can try again like so:
 
 ```c
         wfc_init(wfc);
@@ -72,11 +70,10 @@ solution with a new seed:
 
 ### Working with image files
 
-khuwfc can optionally use stb_image.h and stb_write.h to provide
-convenience functions for working directly with image files instead
-of struct wfc_image.
+khuwfc can optionally use [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb) to provide
+convenience functions for working directly with image files.
 
-You will normally place stb_image.h and stb_write.h in the same
+You will normally place `stb_image.h` and `stb_write.h` in the same
 directory as wfc.h and include their implementations in one of the
 project files:
 
@@ -87,7 +84,7 @@ project files:
         #include "stb_image_write.h"
 ```
 
-Further, you will instruct wfc.h to use stb:
+Further, you will instruct `wfc.h` to use stb:
 
 ```c
         #define WFC_IMPLEMENTATION
@@ -122,10 +119,10 @@ Extra functions enabled by the inclusion of stb:
         // don't forget to wfc_img_destroy(image) loaded images
 ```
 
-## USE AS A COMMAND-LINE TOOL
+## COMMAND-LINE TOOL
 
-The command line tool depends on stb_image.h and stb_write.h.
-Place both files in the same directory as wfc.h.
+The command line tool depends on [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb).
+Place both files in the same directory as `wfc.h`.
 
 ```
         make
