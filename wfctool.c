@@ -4,13 +4,14 @@
 // License: MIT
 // Version: 0.01
 //
-// Wave Function Collapse command-line tool based on khuwfc
+// Wave Function Collapse command-line tool based on khuwfc. The tool
+// can be used to generate WFC images.
 //
 // COMPILING
 // =============================================================================
 //
-// The command-line tool depends on stb_image.h and stb_write.h.
-// Place both files in the same directory as wfctool.c.
+// wfctool depends on stb_image.h and stb_write.h. Place both files in the
+// same directory as wfctool.c.
 //
 //         make
 //         ./wfc

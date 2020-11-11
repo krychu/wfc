@@ -138,6 +138,10 @@
 #ifndef WFC_H
 #define WFC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct wfc;
 
 struct wfc_image {
@@ -161,6 +165,10 @@ void wfc_init(struct wfc *wfc); // Resets wfc generation, wfc_run can be called 
 int wfc_run(struct wfc *wfc, int max_collapse_cnt);
 int wfc_export(struct wfc *wfc, const char *filename);
 void wfc_destroy(struct wfc *wfc); // Also destroys the image
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // WFC_H
 
