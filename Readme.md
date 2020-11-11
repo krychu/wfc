@@ -132,7 +132,7 @@ Place both files in the same directory as wfc.h.
         ./wfc
 ```
 
-Run ./wfc to see available options
+Run `./wfc` to see available options
 
 
 Basic usage:
