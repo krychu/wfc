@@ -1,53 +1,149 @@
-# Wave Function Collapse
+# khuwfc
 
-Single-file Wave Function Collapse library / command-line tool in C.
+Single-file Wave Function Collapse library in C & command-line tool
 
-v.0.1 (pre-alpha)
+- Author: Krystian Samp (samp.krystian at gmail.com)
+- License: MIT
+- Version: 0.01
 
-The library / command-line tool currently require raylib.
+This is an early version that supports the overlapping WFC method.
+The tiled method is in the works. All feedback is very welcome and
+best sent by email. Thanks.
 
-## Use as a library
+## HOW TO USE THE LIBRARY
 
-One file in your project should include wfc.c like this:
+One file in your project should include wfc.h like this:
 
 ```c
-  #define WFC_IMPLEMENTATION
-  #include "wfc.c"
+        #define WFC_IMPLEMENTATION
+        #include "wfc.h"
 ```
 
-Other files in the project can also include `wfc.c` and use its functionality but
-they shouldn't define `WFC_IMPLEMENTATION` macro.
+Other files can also include and use `wfc.h` but they shouldn't define
+`WFC_IMPLEMENTATION`` macro.
 
-**Usage example:**
+Usage:
 
 ```c
-  struct wfc *wfc = wfc_create(
-    128,                     // Output image width in pixels
-    128,                     // Output image height in pixels
-    "input_image.png",       // Input image
-    3,                       // Tile width in pixels
-    3,                       // Tile height in pixels
-    1,                       // Wrap input image on the right and bottom
-    1,                       // Add horizontal flips of all tiles
-    1,                       // Add vertical flips of all tiles
-    1                        // Add n*90deg rotations of all tiles
-  );
-  
-  wfc_run(wfc, -1);          // Run Wave Function Collapse
+        struct wfc *wfc = wfc_overlapping(
+            128,             // Output image width in pixels
+            128,             // Output image height in pixels
+            input_image,     // Input image that will be cut into tiles
+            3,               // Tile width in pixels
+            3,               // Tile height in pixels
+            1,               // Wrap input image on the right and bottom
+            1,               // Add horizontal flips of all tiles
+            1,               // Add vertical flips of all tiles
+            1                // Add n*90deg rotations of all tiles
+        );
+
+        wfc_run(wfc, -1);    // Run Wave Function Collapse
+                             // -1 means no limit on iterations
+        struct wfc_image *output_image = wfc_output_image(wfc);
+        wfc_destroy(wfc);
+        // use output_image->data
+        // wfc_img_destroy(output_image);
+```
+
+By default you work with struct wfc_image for inputs and outputs.
+
+```c
+        struct wfc_image {
+            unsigned char *data;
+            int component_cnt;
+            int width;
+            int height;
+         }
+```
+
+Data is tightly packed without padding. Each pixel consists of
+component_cnt components (e.g., four components for rgba format).
+The output image will have the same number of components as the input
+image.
+
+wfc_run can result in failure if it cannot find a solution. In such
+a case the function returns 0. You can attempt to search for a new
+solution with a new seed:
+
+```c
+        wfc_init(wfc);
+        wfc_run(wfc, -1);
+```
+
+### Working with image files
+
+khuwfc can optionally use stb_image.h and stb_write.h to provide
+convenience functions for working directly with image files instead
+of struct wfc_image.
+
+You will normally place stb_image.h and stb_write.h in the same
+directory as wfc.h and include their implementations in one of the
+project files:
+
+```c
+        #define STB_IMAGE_IMPLEMENTATION
+        #define STB_IMAGE_WRITE_IMPLEMENTATION
+        #include "stb_image.h"
+        #include "stb_image_write.h"
+```
+
+Further, you will instruct wfc.h to use stb:
+
+```c
+        #define WFC_IMPLEMENTATION
+        #define WFC_USE_STB
+        #include "wfc.h"
+```
+
+Usage:
+
+```c
+        struct wfc_image *input_image = wfc_img_load("input.png");
+        struct wfc *wfc = wfc_overlapping(
+            ...
+            input_image,
+            ...
+        );
+
+        wfc_run(wfc, -1);    // Run Wave Function Collapse
                              // -1 means no restriction on number of iterations
-  wfc_export(wfc, "output_image.png");
-  wfc_destroy(wfc);
+        wfc_export(wfc, "output.png");
+        wfc_img_destroy(input_image);
+        wfc_destroy(wfc);
 ```
 
-## Use as a command-line tool
+Extra functions enabled by the inclusion of stb:
+
+```c
+        struct wfc_image *image = wfc_img_load("image.png")
+        wfc_img_save(image, "image.png")
+        wfc_export(wfc, "output.png")
+        wfc_export_tiles(wfc, "directory")
+        // don't forget to wfc_img_destroy(image) loaded images
+```
+
+## USE AS A COMMAND-LINE TOOL
+
+The command line tool depends on stb_image.h and stb_write.h.
+Place both files in the same directory as wfc.h.
 
 ```
-make
-./wfc
+        make
+        ./wfc
 ```
 
-Run `wfc.c` to see available options.
+Run ./wfc to see available options
 
-At the moment the build has been configured / tested on a Mac.
 
-# Gallery
+Basic usage:
+
+```
+        ./wfc -m overlapping -w 128 -h 128 input.png output.png
+```
+
+## THANKS
+
+Thanks for using khuwfc. If you find any bugs, have questions, or miss
+a feature please let me know. Also, if you'd like to share your works
+it's very appreciated. Please use my email at the top of the file.
+
