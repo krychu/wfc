@@ -172,15 +172,6 @@ void wfc_destroy(struct wfc *wfc); // Also destroys the image
 
 #endif // WFC_H
 
-/* #ifdef WFC_TOOL */
-/* #define WFC_IMPLEMENTATION */
-/* #define WFC_USE_STB */
-/* #define STB_IMAGE_IMPLEMENTATION */
-/* #define STB_IMAGE_WRITE_IMPLEMENTATION */
-/* #include "stb_image.h" */
-/* #include "stb_image_write.h" */
-/* #endif */
-
 #if defined(WFC_USE_STB)
 #undef STB_IMAGE_IMPLEMENTATION
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
@@ -199,6 +190,8 @@ void wfc_destroy(struct wfc *wfc); // Also destroys the image
 #include <ctype.h>
 #include <time.h>
 #include <assert.h>
+
+#define WFC_MAX_PROP_CNT 1000
 
 #ifndef WFC_USE_STB
 
@@ -817,7 +810,7 @@ void wfc__destroy_props(struct wfc__prop *props)
 
 struct wfc__prop *wfc__create_props(int cell_cnt)
 {
-  struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * 10);
+  struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * WFC_MAX_PROP_CNT);
   if (props == NULL)
     wfc__destroy_props(props);
   return props;
@@ -905,6 +898,7 @@ struct wfc__tile *wfc__create_tiles(int tile_cnt)
 
 void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
 {
+  // TODO: check for wfc->prop_cnt == WFC_MAX_PROP_CNT
   wfcassert(src_cell_idx >= 0);
   wfcassert(src_cell_idx < wfc->cell_cnt);
   wfcassert(dst_cell_idx >= 0);
@@ -999,6 +993,8 @@ int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
       int freq = wfc->tiles[possible_dst_tile_idx].freq;
       dst_cell->sum_freqs -= freq;
       dst_cell->sum_log_freqs -= freq * log(freq);
+      if (dst_cell->sum_freqs == 0) // no options left
+        return 0;
       dst_cell->entropy = log(dst_cell->sum_freqs) - dst_cell->sum_log_freqs / dst_cell->sum_freqs;
     }
   }
@@ -1032,6 +1028,7 @@ int wfc__propagate(struct wfc *wfc, int cell_idx)
   int cnt = 0;
   for (int i=0; i<wfc->prop_cnt; i++) {
     struct wfc__prop *p = &( wfc->props[i] );
+    //printf("prop: %d (%d)\n", i, wfc->prop_cnt);
     if (!wfc__propagate_prop(wfc, p)) {
       return 0;
     }
@@ -1102,7 +1099,7 @@ void wfc__init_cells(struct wfc *wfc)
 // Allowes for wfc_run to be called again
 void wfc_init(struct wfc *wfc)
 {
-  wfc->seed = (unsigned int) time(NULL);
+  wfc->seed = (unsigned int) time(NULL); // 1605113106 - contradiction seed
   srand(wfc->seed);
   wfc__init_cells(wfc);
 }
