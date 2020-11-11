@@ -123,7 +123,7 @@ Extra functions enabled by the inclusion of stb:
 
 The command-line tool is based on khuwfc and can be used to generate WFC
 images. The tool depends on [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb).
-Place both files in the same directory as `wfc.h`.
+Place both files in the same directory as `wfctool.c`.
 
 ```
         make
