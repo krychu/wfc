@@ -94,7 +94,7 @@ The only supported METHOD at the moment is the 'overlapping' method.\n\n");
 
   printf("\
 Example:\n\
-  ./wfc -m overlapping -w 128 -h 128 -W 3 -H 3 -e 1 -h 1 -v 1 -r 1 plant.png output.png\n\n\
+  ./wfc -m overlapping -w 128 -h 128 -W 3 -H 3 -e 1 -x 1 -y 1 -r 1 plant.png output.png\n\n\
 ");
 
   exit(exit_code);

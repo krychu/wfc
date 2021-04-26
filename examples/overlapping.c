@@ -9,8 +9,8 @@
 
 int main(void)
 {
-  const char *input_filename = "square.png";
-  const char *output_filename = "output.png";
+  const char *input_filename = "../samples/square.png";
+  const char *output_filename = "square.png";
 
   struct wfc_image *input_image = wfc_img_load(input_filename);
   if (input_image == NULL) {

@@ -1,2 +1,2 @@
-make examples: overlapping_1.c
-	cc overlapping_1.c -g -o overlapping_1
+make examples: overlapping.c
+	cc overlapping.c -g -o overlapping

@@ -1,14 +1,22 @@
-# khuwfc
+# khu_wfc
 
-Single-file Wave Function Collapse library in C & command-line tool
+Single-file Wave Function Collapse library in C, plus command-line tool
 
-- Author: Krystian Samp (samp.krystian at gmail.com)
 - License: MIT
 - Version: 0.01
 
 This is an early version that supports the overlapping WFC method.
-The tiled method is in the works. All feedback is very welcome and
-best sent by email. Thanks.
+The method takes an input image and generates output image which is
+locally similar to the input image. Here're a few examples of
+input/output pairs:
+
+
+
+For a good read on WFC method see [this
+article](https://www.gridbugs.org/wave-function-collapse/). It's particularly
+useful for procedural generation of game levels.
+
+All feedback is very welcome. Thanks.
 
 ## HOW TO USE THE LIBRARY
 
@@ -70,7 +78,7 @@ image.
 
 ### Working with image files
 
-khuwfc can optionally use [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb) to provide
+khu_wfc can optionally use [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb) to provide
 convenience functions for working directly with image files.
 
 You will normally place `stb_image.h` and `stb_write.h` in the same
@@ -121,7 +129,7 @@ Extra functions enabled by the inclusion of stb:
 
 ## COMMAND-LINE TOOL
 
-The command-line tool is based on khuwfc and can be used to generate WFC
+The command-line tool is based on khu_wfc and can be used to generate WFC
 images. The tool depends on [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb).
 Place both files in the same directory as `wfctool.c`.
 
@@ -141,7 +149,9 @@ Basic usage:
 
 ## THANKS
 
-Thanks for using khuwfc. If you find any bugs, have questions, or miss
+Thanks for using khu_wfc. If you find any bugs, have questions, or miss
 a feature please let me know. Also, if you'd like to share your works
-it's very appreciated. Please use my email at the top of the file.
+it's very appreciated.
+
+samp.krystian at gmail.com
 
