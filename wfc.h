@@ -1,4 +1,4 @@
-// khu_wfc
+// wfc
 //
 // Single-file Wave Function Collapse library
 //
@@ -66,7 +66,7 @@
 // Working with image files
 // ----------------------------------------
 //
-// khu_wfc can optionally use stb_image.h and stb_write.h to provide
+// wfc can optionally use stb_image.h and stb_write.h to provide
 // convenience functions for working directly with image files.
 //
 // You will normally place stb_image.h and stb_write.h in the same
@@ -112,7 +112,7 @@
 // THANKS
 // =============================================================================
 //
-// Thanks for using khu_wfc. If you find any bugs, have questions, or miss
+// Thanks for using wfc. If you find any bugs, have questions, or miss
 // a feature please let me know. Also, if you'd like to share your works
 // it's very appreciated. Please use my email at the top of the file.
 //

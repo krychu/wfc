@@ -1,4 +1,4 @@
-# khu_wfc
+# wfc
 
 Single-file Wave Function Collapse library in C, plus command-line tool
 
@@ -12,11 +12,9 @@ input/output pairs:
 
 <img width="950px" src="https://github.com/krychu/wfc/blob/master/samples/mosaic.png?raw=true">
 
-For a good read on WFC method see [this
+For a good read on WFC see [this
 article](https://www.gridbugs.org/wave-function-collapse/). It's particularly
 useful for procedural generation of game levels.
-
-All feedback is very welcome. Thanks.
 
 ## HOW TO USE THE LIBRARY
 
@@ -78,7 +76,7 @@ image.
 
 ### Working with image files
 
-khu_wfc can optionally use [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb) to provide
+wfc can optionally use [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb) to provide
 convenience functions for working directly with image files.
 
 You will normally place `stb_image.h` and `stb_write.h` in the same
@@ -129,9 +127,10 @@ Extra functions enabled by the inclusion of stb:
 
 ## COMMAND-LINE TOOL
 
-The command-line tool is based on khu_wfc and can be used to generate WFC
-images. The tool depends on [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb).
-Place both files in the same directory as `wfctool.c`.
+The command-line tool is based on the wfc library and can be used to generate
+WFC images. The tool depends on [stb_image.h](https://github.com/nothings/stb)
+and [stb_write.h](https://github.com/nothings/stb). Place both files in the same
+directory as `wfctool.c`.
 
 ```
         make
@@ -149,9 +148,8 @@ Basic usage:
 
 ## THANKS
 
-Thanks for using khu_wfc. If you find any bugs, have questions, or miss
-a feature please let me know. Also, if you'd like to share your works
-it's very appreciated.
+Thanks for using wfc. If you find any bugs, have questions, or feedback please
+let me know. Also, if you'd like to share your works it's very appreciated.
 
 samp.krystian at gmail.com
 
