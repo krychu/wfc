@@ -10,7 +10,7 @@ The method takes an input image and generates output image which is
 locally similar to the input image. Here're a few examples of
 input/output pairs:
 
-<img width="950px" src="https://github.com/krychu/wfc/blob/master/samples/mosaic.png?raw=true">
+<img width="950px" src="https://user-images.githubusercontent.com/947457/116161084-6f546e00-a6f3-11eb-87d8-3ed9c2c7e26c.png">
 
 For a good read on WFC see [this
 article](https://www.gridbugs.org/wave-function-collapse/). It's particularly
