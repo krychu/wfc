@@ -1,6 +1,6 @@
 # wfc
 
-Single-file Wave Function Collapse library in C, plus command-line tool
+Single-file Wave Function Collapse library in C, plus a command-line tool
 
 - License: MIT
 - Version: 0.01
@@ -127,8 +127,8 @@ Extra functions enabled by the inclusion of stb:
 
 ## COMMAND-LINE TOOL
 
-The command-line tool is based on the wfc library and can be used to generate
-WFC images. The tool depends on [stb_image.h](https://github.com/nothings/stb)
+The command-line tool uses the library and allows to generate WFC images.
+The tool depends on [stb_image.h](https://github.com/nothings/stb)
 and [stb_write.h](https://github.com/nothings/stb). Place both files in the same
 directory as `wfctool.c`.
 
