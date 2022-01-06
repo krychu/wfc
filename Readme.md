@@ -76,10 +76,10 @@ image.
 
 ### Working with image files
 
-wfc can optionally use [stb_image.h](https://github.com/nothings/stb) and [stb_write.h](https://github.com/nothings/stb) to provide
+wfc can optionally use [stb_image.h](https://github.com/nothings/stb) and [stb_image_write.h](https://github.com/nothings/stb) to provide
 convenience functions for working directly with image files.
 
-You will normally place `stb_image.h` and `stb_write.h` in the same
+You will normally place `stb_image.h` and `stb_image_write.h` in the same
 directory as `wfc.h` and include their implementations in one of the
 project files:
 
@@ -129,7 +129,7 @@ Extra functions enabled by the inclusion of stb:
 
 The command-line tool uses the library and allows to generate WFC images.
 The tool depends on [stb_image.h](https://github.com/nothings/stb)
-and [stb_write.h](https://github.com/nothings/stb). Place both files in the same
+and [stb_image_write.h](https://github.com/nothings/stb). Place both files in the same
 directory as `wfctool.c`.
 
 ```

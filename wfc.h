@@ -286,14 +286,14 @@ struct wfc {
 };
 
 #ifdef WFC_DEBUG
-const char *wfc__direction_strings[4] = {"up","down","left","right"};
+static const char *wfc__direction_strings[4] = {"up","down","left","right"};
 
-void wfc__print_prop(struct wfc__prop *p, const char *prefix)
+static void wfc__print_prop(struct wfc__prop *p, const char *prefix)
 {
   printf("%s%d -> %s -> %d\n", prefix, p->src_cell_idx, direction_strings[p->direction], p->dst_cell_idx);
 }
 
-void wfc__print_props(struct wfc__prop *p, int prop_cnt, const char *prefix)
+static void wfc__print_props(struct wfc__prop *p, int prop_cnt, const char *prefix)
 {
   for (int i=0; i<prop_cnt; i++) {
     print_prop(&(p[i]), prefix);
@@ -409,7 +409,7 @@ void wfc_img_destroy(struct wfc_image *image)
 }
 
 // Return NULL on error
-struct wfc_image *wfc__img_expand(struct wfc_image *image, int xexp, int yexp)
+static struct wfc_image *wfc__img_expand(struct wfc_image *image, int xexp, int yexp)
 {
   struct wfc_image *exp_image = wfc_img_create(image->width + xexp, image->height + yexp, image->component_cnt);
   if (exp_image == NULL) {
@@ -430,7 +430,7 @@ struct wfc_image *wfc__img_expand(struct wfc_image *image, int xexp, int yexp)
 }
 
 // Return 1 if the two images overlap perfectly except the edges in the given direction, 0 otherwise.
-int wfc__img_cmpoverlap(struct wfc_image *a, struct wfc_image *b, enum wfc__direction direction)
+static int wfc__img_cmpoverlap(struct wfc_image *a, struct wfc_image *b, enum wfc__direction direction)
 {
   int a_offx, a_offy, b_offx, b_offy, width, height;
 
@@ -478,7 +478,7 @@ int wfc__img_cmpoverlap(struct wfc_image *a, struct wfc_image *b, enum wfc__dire
 }
 
 // Return NULL on error
-struct wfc_image *wfc__img_flip_horizontally(struct wfc_image *image)
+static struct wfc_image *wfc__img_flip_horizontally(struct wfc_image *image)
 {
   struct wfc_image *copy = wfc_img_copy(image);
   if (copy == NULL) {
@@ -501,7 +501,7 @@ struct wfc_image *wfc__img_flip_horizontally(struct wfc_image *image)
 }
 
 // Return NULL on error
-struct wfc_image *wfc__img_flip_vertically(struct wfc_image *image)
+static struct wfc_image *wfc__img_flip_vertically(struct wfc_image *image)
 {
   struct wfc_image *copy = wfc_img_copy(image);
   if (copy == NULL) {
@@ -521,7 +521,7 @@ struct wfc_image *wfc__img_flip_vertically(struct wfc_image *image)
   return copy;
 }
 
-struct wfc_image *wfc__img_rotate90(struct wfc_image *image, int n) {
+static struct wfc_image *wfc__img_rotate90(struct wfc_image *image, int n) {
   wfcassert(n>0);
 
   n %= 4;
@@ -563,7 +563,7 @@ struct wfc_image *wfc__img_rotate90(struct wfc_image *image, int n) {
 }
 
 // Return 1 if the two images are the same, 0 otherwise.
-int wfc__img_cmp(struct wfc_image *a, struct wfc_image *b)
+static int wfc__img_cmp(struct wfc_image *a, struct wfc_image *b)
 {
   if (a->width!=b->width || a->height!=b->height || a->component_cnt!=b->component_cnt) {
     return 0;
@@ -576,25 +576,25 @@ int wfc__img_cmp(struct wfc_image *a, struct wfc_image *b)
 // WFC: Utils (Method-independent)
 //
 
-int wfc__nofunc_int(const char *func_name, const char *msg, ...)
+static int wfc__nofunc_int(const char *func_name, const char *msg, ...)
 {
   printf("%s: %s\n", func_name, msg);
   return -1;
 }
 
-void *wfc__nofunc_ptr(const char *func_name, const char *msg, ...)
+static void *wfc__nofunc_ptr(const char *func_name, const char *msg, ...)
 {
   printf("%s: %s\n", func_name, msg);
   return NULL;
 }
 
-void wfc_destroy_cells(int *cells)
+static void wfc_destroy_cells(int *cells)
 {
   free(cells);
 }
 
 // Return NULL on error
-int *wfc_cells(struct wfc *wfc)
+static int *wfc_cells(struct wfc *wfc)
 {
   int *cells = malloc(sizeof(*cells) * wfc->cell_cnt);
   if (cells == NULL)
@@ -668,7 +668,7 @@ int wfc_export_tiles(struct wfc *wfc, const char *path)
 
 // Return NULL on error
 // Assumes the tile fits in the image
-struct wfc_image *wfc__create_tile_image(struct wfc_image *image, int x, int y, int tile_width, int tile_height)
+static struct wfc_image *wfc__create_tile_image(struct wfc_image *image, int x, int y, int tile_width, int tile_height)
 {
   struct wfc_image *tile_image = wfc_img_create(tile_width, tile_height, image->component_cnt);
   if (tile_image == NULL) {
@@ -690,7 +690,7 @@ struct wfc_image *wfc__create_tile_image(struct wfc_image *image, int x, int y, 
 }
 
 // Return 0 on error
-int wfc__add_overlapping_images(struct wfc__tile *tiles, struct wfc_image *image, int xcnt, int ycnt, int tile_width, int tile_height)
+static int wfc__add_overlapping_images(struct wfc__tile *tiles, struct wfc_image *image, int xcnt, int ycnt, int tile_width, int tile_height)
 {
   int tile_cnt = xcnt * ycnt;
   for (int y=0; y<ycnt; y++)
@@ -712,7 +712,7 @@ int wfc__add_overlapping_images(struct wfc__tile *tiles, struct wfc_image *image
 
 // Return 0 on error, non-0 on success
 // flip_direction: 0 - horizontal, 1 vertical
-int wfc__add_flipped_images(struct wfc__tile *tiles, int tile_idx, int flip_direction)
+static int wfc__add_flipped_images(struct wfc__tile *tiles, int tile_idx, int flip_direction)
 {
   for (int i=0; i<tile_idx; i++) {
     struct wfc__tile *src = &tiles[i];
@@ -737,7 +737,7 @@ int wfc__add_flipped_images(struct wfc__tile *tiles, int tile_idx, int flip_dire
 }
 
 // Return 0 on error, non-0 on success
-int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
+static int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
 {
   for (int i=0; i<tile_idx; i++) {
     for (int j=0; j<3; j++) {
@@ -762,7 +762,7 @@ int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
 
 // Return unique tiles with frequencies
 // Return 0 on error, non-0 on success
-int wfc__remove_duplicate_tiles(struct wfc__tile **tiles, int *tile_cnt)
+static int wfc__remove_duplicate_tiles(struct wfc__tile **tiles, int *tile_cnt)
 {
   wfcassert(*tile_cnt);
 
@@ -803,12 +803,12 @@ int wfc__remove_duplicate_tiles(struct wfc__tile **tiles, int *tile_cnt)
 // WFC: Solve (Method-independent)
 //
 
-void wfc__destroy_props(struct wfc__prop *props)
+static void wfc__destroy_props(struct wfc__prop *props)
 {
   free(props);
 }
 
-struct wfc__prop *wfc__create_props(int cell_cnt)
+static struct wfc__prop *wfc__create_props(int cell_cnt)
 {
   struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * WFC_MAX_PROP_CNT);
   if (props == NULL)
@@ -816,7 +816,7 @@ struct wfc__prop *wfc__create_props(int cell_cnt)
   return props;
 }
 
-void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt)
+static void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt)
 {
   for (int i=0; i<cell_cnt; i++) {
     free(cells[i].tiles);
@@ -825,7 +825,7 @@ void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt)
 }
 
 // Return NULL on error
-struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
+static struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
 {
   struct wfc__cell *cells = malloc(sizeof(*cells) * cell_cnt);
   if (cells == NULL)
@@ -848,7 +848,7 @@ struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
   return NULL;
 }
 
-void wfc__destroy_tiles(struct wfc__tile *tiles, int tile_cnt)
+static void wfc__destroy_tiles(struct wfc__tile *tiles, int tile_cnt)
 {
   if (tiles == NULL)
     return;
@@ -864,7 +864,7 @@ void wfc__destroy_tiles(struct wfc__tile *tiles, int tile_cnt)
 }
 
 // Return 0 on error
-struct wfc__tile *wfc__create_tiles(int tile_cnt)
+static struct wfc__tile *wfc__create_tiles(int tile_cnt)
 {
   struct wfc__tile *tiles = malloc(sizeof(*tiles) * tile_cnt);
   if (tiles == NULL)
@@ -896,7 +896,7 @@ struct wfc__tile *wfc__create_tiles(int tile_cnt)
   return NULL;
 }
 
-void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
+static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
 {
   // TODO: check for wfc->prop_cnt == WFC_MAX_PROP_CNT
   wfcassert(src_cell_idx >= 0);
@@ -912,28 +912,28 @@ void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc
 }
 
 // add prop to update cell above the cell_idx
-void wfc__add_prop_up(struct wfc *wfc, int src_cell_idx)
+static void wfc__add_prop_up(struct wfc *wfc, int src_cell_idx)
 {
   if (src_cell_idx - wfc->output_width >= 0) {
     wfc__add_prop(wfc, src_cell_idx, src_cell_idx - wfc->output_width, WFC_UP);
   }
 }
 
-void wfc__add_prop_down(struct wfc *wfc, int src_cell_idx)
+static void wfc__add_prop_down(struct wfc *wfc, int src_cell_idx)
 {
   if (src_cell_idx + wfc->output_width < wfc->cell_cnt) {
     wfc__add_prop(wfc, src_cell_idx, src_cell_idx + wfc->output_width, WFC_DOWN);
   }
 }
 
-void wfc__add_prop_left(struct wfc *wfc, int src_cell_idx)
+static void wfc__add_prop_left(struct wfc *wfc, int src_cell_idx)
 {
   if (src_cell_idx % wfc->output_width != 0) {
     wfc__add_prop(wfc, src_cell_idx, src_cell_idx - 1, WFC_LEFT);
   }
 }
 
-void wfc__add_prop_right(struct wfc *wfc, int src_cell_idx)
+static void wfc__add_prop_right(struct wfc *wfc, int src_cell_idx)
 {
   if (src_cell_idx % wfc->output_width != wfc->output_width - 1) {
     wfc__add_prop(wfc, src_cell_idx, src_cell_idx + 1, WFC_RIGHT);
@@ -941,7 +941,7 @@ void wfc__add_prop_right(struct wfc *wfc, int src_cell_idx)
 }
 
 // Return 1 if the tiles are allowed next to each other in the specified direction. 0 otherwise.
-int wfc__tiles_allowed(struct wfc *wfc, int src_tile_idx, int dst_tile_idx, enum wfc__direction d)
+static int wfc__tiles_allowed(struct wfc *wfc, int src_tile_idx, int dst_tile_idx, enum wfc__direction d)
 {
   int *allowed_tiles = wfc->tiles[ src_tile_idx ].allowed_tiles[d];
   int allowed_tile_cnt = wfc->tiles[ src_tile_idx ].allowed_tile_cnt[d];
@@ -954,7 +954,7 @@ int wfc__tiles_allowed(struct wfc *wfc, int src_tile_idx, int dst_tile_idx, enum
 }
 
 // Does the cell enable tile in the direction?
-int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum wfc__direction d)
+static int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum wfc__direction d)
 {
   struct wfc__cell *cell = &( wfc->cells[cell_idx] );
 
@@ -975,7 +975,7 @@ int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum wfc__dir
 // and propagate updates
 //
 // Return 0 on error
-int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
+static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
 {
   int new_cnt = 0;
 
@@ -1016,7 +1016,7 @@ int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
 }
 
 // Return 0 on error (contradiction)
-int wfc__propagate(struct wfc *wfc, int cell_idx)
+static int wfc__propagate(struct wfc *wfc, int cell_idx)
 {
   wfc->prop_cnt = 0;
 
@@ -1039,7 +1039,7 @@ int wfc__propagate(struct wfc *wfc, int cell_idx)
 }
 
 // Return 0 on error (contradiction)
-int wfc__collapse(struct wfc *wfc, int cell_idx)
+static int wfc__collapse(struct wfc *wfc, int cell_idx)
 {
   int remaining = rand() % wfc->cells[cell_idx].sum_freqs;
   for (int i=0; i<wfc->cells[cell_idx].tile_cnt; i++) {
@@ -1057,7 +1057,7 @@ int wfc__collapse(struct wfc *wfc, int cell_idx)
   return 0;
 }
 
-int wfc__next_cell(struct wfc *wfc)
+static int wfc__next_cell(struct wfc *wfc)
 {
   int min_idx = -1;
   double min_entropy = DBL_MAX;
@@ -1072,7 +1072,7 @@ int wfc__next_cell(struct wfc *wfc)
   return min_idx;
 }
 
-void wfc__init_cells(struct wfc *wfc)
+static void wfc__init_cells(struct wfc *wfc)
 {
   int sum_freqs = 0;
   int sum_log_freqs = 0;
@@ -1152,7 +1152,7 @@ void wfc_destroy(struct wfc *wfc)
 // WFC: Overlapping method
 //
 
-void wfc__compute_allowed_tiles(struct wfc__tile *tiles, int tile_cnt)
+static void wfc__compute_allowed_tiles(struct wfc__tile *tiles, int tile_cnt)
 {
   int d_idx = 0;
   int i = 0;
@@ -1178,7 +1178,7 @@ void wfc__compute_allowed_tiles(struct wfc__tile *tiles, int tile_cnt)
 }
 
 // Return NULL on error
-struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
+static struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
                                                 int tile_width,
                                                 int tile_height,
                                                 int expand_image,
