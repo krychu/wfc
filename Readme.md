@@ -28,6 +28,9 @@ One file in your project should include `wfc.h` like this:
 Other files can also include and use `wfc.h` but they shouldn't define
 `WFC_IMPLEMENTATION` macro.
 
+Alternatively, you can build a traditional .o file with `make wfc.o` and use
+`wfc.h` as a regular header file.
+
 Usage:
 
 ```c
