@@ -1,4 +1,7 @@
-make wfctool: wfctool.c
+wfctool: wfctool.c
+	cc wfctool.c -O3 -DWFC_TOOL -o wfc -lm
+
+debug: wfctool.c
 	cc wfctool.c -g -DWFC_TOOL -o wfc -lm
 
 # in case you'd rather have a more traditional wfc.o file to link against
