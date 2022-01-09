@@ -4,7 +4,7 @@
 //
 // Author:  Krystian Samp (samp.krystian at gmail.com)
 // License: MIT
-// Version: 0.01
+// Version: 0.5
 //
 // This is an early version that supports the overlapping WFC method.
 // The tiled method is in the works. All feedback is very welcome and
@@ -116,24 +116,6 @@
 // a feature please let me know. Also, if you'd like to share your works
 // it's very appreciated. Please use my email at the top of the file.
 //
-//
-// LOG
-// =============================================================================
-//
-// 0.01 (11.11.2020) Add MIT license
-//      (11.11.2020) Split into library and wfctool
-//      (10.11.2020) Handle errors, remove asserts
-//      (09.11.2020) Use random seed
-//      (09.11.2020) Update doc and cmd tool help
-//      (09.11.2020) Remove raylib dep, add stb option
-//      (31.10.2020) Create command-line tool
-//      (30.10.2020) Pre-alpha version
-//
-// - Add seed as an option
-// - Add option for 'next_cell' that picks cell based on min_tile_cnt
-// - Add option for 'collapse' that uni-randomly picks the tile
-// - Add tiled method
-//
 
 #ifndef WFC_H
 #define WFC_H
@@ -230,10 +212,13 @@ enum wfc__method {WFC_METHOD_OVERLAPPING, WFC_METHOD_TILED};
 // Rules are stored in tiles
 struct wfc__tile {
   struct wfc_image *image;
-  int *allowed_tiles[4];       // An array of allowed tile indices in each
-                               // direction. Typically tiles are allowed to each
-                               // other if they overlap excluding the edges.
-  int allowed_tile_cnt[4];
+
+  int *allowed_tiles[4];       // A lookup of allowed tile indices in each
+                               // direction. Tile index is used to index the
+                               // lookup. In the overlapping method tiles are
+                               // allowed next to each other if their content
+                               // overlaps exluding the edges.
+
   int freq;                    // Relative frequency of the tile. Typically a
                                // count of tile occurrences in the input image.
                                // It affects the probability of the tile being
@@ -875,7 +860,6 @@ static struct wfc__tile *wfc__create_tiles(int tile_cnt)
     tiles[i].freq = 0;
     for (int j=0; j<4; j++) {
       tiles[i].allowed_tiles[directions[j]] = NULL;
-      tiles[i].allowed_tile_cnt[directions[j]] = 0;
     }
   }
 
@@ -943,14 +927,7 @@ static void wfc__add_prop_right(struct wfc *wfc, int src_cell_idx)
 // Return 1 if the tiles are allowed next to each other in the specified direction. 0 otherwise.
 static int wfc__tiles_allowed(struct wfc *wfc, int src_tile_idx, int dst_tile_idx, enum wfc__direction d)
 {
-  int *allowed_tiles = wfc->tiles[ src_tile_idx ].allowed_tiles[d];
-  int allowed_tile_cnt = wfc->tiles[ src_tile_idx ].allowed_tile_cnt[d];
-  for (int i=0; i<allowed_tile_cnt; i++) {
-    if (dst_tile_idx == allowed_tiles[i]) {
-      return 1;
-    }
-  }
-  return 0;
+  return wfc->tiles[ src_tile_idx ].allowed_tiles[d][ dst_tile_idx ];
 }
 
 // Does the cell enable tile in the direction?
@@ -969,7 +946,6 @@ static int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum w
   }
   return 0;
 }
-
 
 // Updates tiles in the destination cell to those that are allowed by the source cell
 // and propagate updates
@@ -1099,7 +1075,7 @@ static void wfc__init_cells(struct wfc *wfc)
 // Allowes for wfc_run to be called again
 void wfc_init(struct wfc *wfc)
 {
-  wfc->seed = (unsigned int) time(NULL); // 1605113106 - contradiction seed
+  wfc->seed = (unsigned int) time(NULL);
   srand(wfc->seed);
   wfc__init_cells(wfc);
 }
@@ -1164,14 +1140,11 @@ static void wfc__compute_allowed_tiles(struct wfc__tile *tiles, int tile_cnt)
     for (i=0; i<tile_cnt; i++) {
       struct wfc__tile *t = &( tiles[i] );
       for (int j=0; j<tile_cnt; j++) {
-        /* if (i==j) { */
-        /*   continue; */
-        /* } */
+        // if (i==j) {
+        //  continue;
+        // }
 
-        if (wfc__img_cmpoverlap(tiles[i].image, tiles[j].image, d)) {
-          t->allowed_tiles[d][ t->allowed_tile_cnt[d] ] = j;
-          t->allowed_tile_cnt[d]++;
-        }
+        t->allowed_tiles[d][j] = wfc__img_cmpoverlap(tiles[i].image, tiles[j].image, d) ? 1 : 0;
       }
     }
   }
