@@ -268,6 +268,7 @@ struct wfc {
 
   struct wfc__prop *props;     // Propagation updates
   int prop_cnt;
+  int collapsed_cell_cnt;
 };
 
 #ifdef WFC_DEBUG
@@ -980,6 +981,7 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
   }
 
   if (dst_cell->tile_cnt != new_cnt) {
+    if (new_cnt == 1) wfc->collapsed_cell_cnt++;
     if (p->direction != WFC_DOWN) wfc__add_prop_up(wfc, p->dst_cell_idx);
     if (p->direction != WFC_UP) wfc__add_prop_down(wfc, p->dst_cell_idx);
     if (p->direction != WFC_RIGHT) wfc__add_prop_left(wfc, p->dst_cell_idx);
@@ -1026,6 +1028,7 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
       wfc->cells[cell_idx].tiles[0] = wfc->cells[cell_idx].tiles[i];
       wfc->cells[cell_idx].tile_cnt = 1;
       wfc->cells[cell_idx].entropy = 0;
+      wfc->collapsed_cell_cnt++;
       return 1;
     }
   }
@@ -1072,11 +1075,12 @@ static void wfc__init_cells(struct wfc *wfc)
   wfc->prop_cnt = 0;
 }
 
-// Allowes for wfc_run to be called again
+// Allows to call wfc_run again
 void wfc_init(struct wfc *wfc)
 {
   wfc->seed = (unsigned int) time(NULL);
   srand(wfc->seed);
+  wfc->collapsed_cell_cnt = 0;
   wfc__init_cells(wfc);
 }
 
@@ -1085,11 +1089,10 @@ void wfc_init(struct wfc *wfc)
 // Return 0 on error (contradiction occurred)
 int wfc_run(struct wfc *wfc, int max_collapse_cnt)
 {
-  int cnt=0;
   int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
 
   while (1) {
-    print_progress(cnt);
+    print_progress(wfc->collapsed_cell_cnt);
 
     if (!wfc__collapse(wfc, cell_idx)) {
       print_endprogress();
@@ -1102,13 +1105,13 @@ int wfc_run(struct wfc *wfc, int max_collapse_cnt)
     }
 
     cell_idx = wfc__next_cell(wfc);
-    cnt++;
 
-    if (cell_idx == -1 || cnt == max_collapse_cnt) {
+    if (cell_idx == -1 || wfc->collapsed_cell_cnt == max_collapse_cnt) {
       break;
     }
   }
 
+  print_progress(wfc->collapsed_cell_cnt);
   print_endprogress();
 
   return 1;
