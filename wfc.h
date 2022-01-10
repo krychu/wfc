@@ -209,6 +209,9 @@ enum wfc__direction {WFC_UP,WFC_DOWN,WFC_LEFT,WFC_RIGHT};
 int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
 enum wfc__method {WFC_METHOD_OVERLAPPING, WFC_METHOD_TILED};
 
+// TODO: Consider direction -> matrix for rules
+// int *rules[4];
+
 // Rules are stored in tiles
 struct wfc__tile {
   struct wfc_image *image;
@@ -890,7 +893,7 @@ static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, e
   wfcassert(dst_cell_idx < wfc->cell_cnt);
 
   struct wfc__prop *p = &( wfc->props[wfc->prop_cnt] );
-  (wfc->prop_cnt)++;;
+  (wfc->prop_cnt)++;
   p->src_cell_idx = src_cell_idx;
   p->dst_cell_idx = dst_cell_idx;
   p->direction = direction;
@@ -938,10 +941,26 @@ static int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum w
 
   // Tile is enabled if any of the cell's tiles allowes it in
   // the specified diretion
-  for (int i=0; i<cell->tile_cnt; i++) {
-    int cell_tile_idx = cell->tiles[i];
+  for (int i=0, cnt=cell->tile_cnt; i<cnt; i++) {
+    if (wfc__tiles_allowed(wfc, cell->tiles[i], tile_idx, d)) {
+      return 1;
+    }
+  }
 
-    if (wfc__tiles_allowed(wfc, cell_tile_idx, tile_idx, d)) {
+  /* for (int i=0, cnt=cell->tile_cnt, *cell_tile_idx=cell->tiles; i<cnt; cell_tile_idx++, i++) */
+  /*   if (wfc__tiles_allowed(wfc, *cell_tile_idx, tile_idx, d)) { */
+  /*     return 1; */
+  /*   } */
+
+  return 0;
+}
+
+int tmp;
+
+static int check(struct wfc *wfc, int cell_idx, enum wfc__direction d) {
+  for (int i=tmp+1; i<wfc->prop_cnt; i++) {
+    struct wfc__prop *p = &( wfc->props[i] );
+    if (p->src_cell_idx == cell_idx && p->direction == d) {
       return 1;
     }
   }
@@ -959,7 +978,7 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
   struct wfc__cell *dst_cell = &( wfc->cells[ p->dst_cell_idx ] );
 
   // Go through all destination tiles and check whether they are enabled by the source cell
-  for (int i=0; i<dst_cell->tile_cnt; i++) {
+  for (int i=0, cnt=dst_cell->tile_cnt; i<cnt; i++) {
     int possible_dst_tile_idx = dst_cell->tiles[i];
 
     // If a destination tile is enabled by the source cell, keep it
@@ -980,12 +999,14 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
     return 0;
   }
 
+  // todo: lookup?
+  // HERE
   if (dst_cell->tile_cnt != new_cnt) {
     if (new_cnt == 1) wfc->collapsed_cell_cnt++;
-    if (p->direction != WFC_DOWN) wfc__add_prop_up(wfc, p->dst_cell_idx);
-    if (p->direction != WFC_UP) wfc__add_prop_down(wfc, p->dst_cell_idx);
-    if (p->direction != WFC_RIGHT) wfc__add_prop_left(wfc, p->dst_cell_idx);
-    if (p->direction != WFC_LEFT) wfc__add_prop_right(wfc, p->dst_cell_idx);
+    if (p->direction != WFC_DOWN) { if (!check(wfc, p->dst_cell_idx, WFC_UP)) wfc__add_prop_up(wfc, p->dst_cell_idx); }
+    if (p->direction != WFC_UP) { if (!check(wfc, p->dst_cell_idx, WFC_DOWN)) wfc__add_prop_down(wfc, p->dst_cell_idx); }
+    if (p->direction != WFC_RIGHT) { if (!check(wfc, p->dst_cell_idx, WFC_LEFT)) wfc__add_prop_left(wfc, p->dst_cell_idx); }
+    if (p->direction != WFC_LEFT) { if (!check(wfc, p->dst_cell_idx, WFC_RIGHT)) wfc__add_prop_right(wfc, p->dst_cell_idx); }
   }
 
   dst_cell->tile_cnt = new_cnt;
@@ -1003,14 +1024,12 @@ static int wfc__propagate(struct wfc *wfc, int cell_idx)
   wfc__add_prop_left(wfc, cell_idx);
   wfc__add_prop_right(wfc, cell_idx);
 
-  int cnt = 0;
   for (int i=0; i<wfc->prop_cnt; i++) {
+    tmp = i;
     struct wfc__prop *p = &( wfc->props[i] );
-    //printf("prop: %d (%d)\n", i, wfc->prop_cnt);
     if (!wfc__propagate_prop(wfc, p)) {
       return 0;
     }
-    cnt++;
   }
 
   return 1;
@@ -1078,7 +1097,7 @@ static void wfc__init_cells(struct wfc *wfc)
 // Allows to call wfc_run again
 void wfc_init(struct wfc *wfc)
 {
-  wfc->seed = (unsigned int) time(NULL);
+  wfc->seed = 1641743677; //(unsigned int) time(NULL);
   srand(wfc->seed);
   wfc->collapsed_cell_cnt = 0;
   wfc__init_cells(wfc);
