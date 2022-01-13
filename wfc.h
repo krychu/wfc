@@ -950,7 +950,8 @@ static int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum w
   // the specified diretion
   int tile_cnt = wfc->tile_cnt;
   for (int i=0, cnt=cell->tile_cnt; i<cnt; i++) {
-    if (allowed_tiles[d][tiles[i] * tile_cnt + tile_idx]) {
+    //if (allowed_tiles[d][tiles[i] * tile_cnt + tile_idx]) {
+    if (allowed_tiles[d][tile_idx * tile_cnt + tiles[i]]) {
       return 1;
     }
   }
@@ -1162,7 +1163,8 @@ static void wfc__compute_allowed_tiles(struct wfc__tile *tiles, int tile_cnt)
       for (int j=0; j<tile_cnt; j++) {
         //if (i==j)
         //  continue;
-        allowed_tiles[d][i*tile_cnt + j] = wfc__img_cmpoverlap(tiles[i].image, tiles[j].image, d);
+        //allowed_tiles[d][i*tile_cnt + j] = wfc__img_cmpoverlap(tiles[i].image, tiles[j].image, d);
+        allowed_tiles[d][i*tile_cnt + j] = wfc__img_cmpoverlap(tiles[j].image, tiles[i].image, d);
       }
     }
   }
