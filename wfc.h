@@ -4,7 +4,7 @@
 //
 // Author:  Krystian Samp (samp.krystian at gmail.com)
 // License: MIT
-// Version: 0.5
+// Version: 0.6
 //
 // This is an early version that supports the overlapping WFC method.
 // The tiled method is in the works. All feedback is very welcome and
@@ -811,9 +811,7 @@ static struct wfc__prop *wfc__create_props(int cell_cnt)
 
 static void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt)
 {
-  for (int i=0; i<cell_cnt; i++) {
-    free(cells[i].tiles);
-  }
+  free(cells[0].tiles);
   free(cells);
 }
 
@@ -827,8 +825,9 @@ static struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
   for (int i=0; i<cell_cnt; i++)
     cells[i].tiles = NULL;
 
-  for (int i=0; i<cell_cnt; i++) {
-    cells[i].tiles = malloc(sizeof(*(cells[i].tiles)) * tile_cnt);
+  cells[0].tiles = malloc(sizeof(*(cells[0].tiles)) * tile_cnt * cell_cnt);
+  for (int i=1; i<cell_cnt; i++) {
+    cells[i].tiles = cells[0].tiles + i * tile_cnt;
     if (cells[i].tiles == NULL)
       goto CLEANUP;
   }
@@ -899,10 +898,6 @@ static int wfc__create_allowed_tiles(int tile_cnt)
 static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
 {
   // TODO: check for wfc->prop_cnt == WFC_MAX_PROP_CNT
-  wfcassert(src_cell_idx >= 0);
-  wfcassert(src_cell_idx < wfc->cell_cnt);
-  wfcassert(dst_cell_idx >= 0);
-  wfcassert(dst_cell_idx < wfc->cell_cnt);
 
   struct wfc__prop *p = &( wfc->props[wfc->prop_cnt] );
   (wfc->prop_cnt)++;
@@ -1100,7 +1095,7 @@ static void wfc__init_cells(struct wfc *wfc)
 // Allows to call wfc_run again
 void wfc_init(struct wfc *wfc)
 {
-  wfc->seed = 1641743677;//(unsigned int) time(NULL); // 1641743677
+  wfc->seed = (unsigned int) time(NULL); // 1641743677
   srand(wfc->seed);
   wfc->collapsed_cell_cnt = 0;
   wfc__init_cells(wfc);
