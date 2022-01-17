@@ -146,7 +146,7 @@ struct wfc *wfc_overlapping(int output_width,              // Output width in pi
 void wfc_init(struct wfc *wfc); // Resets wfc generation, wfc_run can be called again
 int wfc_run(struct wfc *wfc, int max_collapse_cnt);
 int wfc_export(struct wfc *wfc, const char *filename);
-void wfc_destroy(struct wfc *wfc); // Also destroys the image
+void wfc_destroy(struct wfc *wfc);
 
 #ifdef __cplusplus
 }
@@ -1140,7 +1140,6 @@ void wfc_destroy(struct wfc *wfc)
   wfc__destroy_tiles(wfc->tiles, wfc->tile_cnt);
   wfc__destroy_allowed_tiles(wfc->allowed_tiles);
   wfc__destroy_props(wfc->props);
-  //wfc_img_destroy(wfc->image);
   free(wfc);
 }
 
