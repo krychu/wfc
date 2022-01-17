@@ -224,7 +224,6 @@ struct wfc__cell {
   int tile_cnt;
 
   int sum_freqs;               // sum_* are cached values used to compute entropy
-  /* int sum_log_freqs; */
   double entropy;              // Typically we collapse cell with smallest entropy next
 };
 
@@ -691,6 +690,7 @@ static int wfc__add_overlapping_images(struct wfc__tile *tiles, struct wfc_image
   for (int y=0; y<ycnt; y++)
     for (int x=0; x<xcnt; x++) {
       struct wfc__tile *tile = &( tiles[y*xcnt + x] );
+      tile->freq = 1;
       tile->image = wfc__create_tile_image(image, x, y, tile_width, tile_height);
       if (tile->image == NULL)
         goto CLEANUP;
@@ -712,6 +712,7 @@ static int wfc__add_flipped_images(struct wfc__tile *tiles, int tile_idx, int fl
   for (int i=0; i<tile_idx; i++) {
     struct wfc__tile *src = &tiles[i];
     struct wfc__tile *dst = &tiles[tile_idx + i];
+    dst->freq = 1;
     if (flip_direction == 0)
       dst->image = wfc__img_flip_horizontally(src->image);
     else
@@ -738,6 +739,7 @@ static int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
     for (int j=0; j<3; j++) {
       struct wfc__tile *src = &tiles[i];
       struct wfc__tile *dst = &tiles[tile_idx + i*3 + j];
+      dst->freq = 1;
       dst->image = wfc__img_rotate90(src->image, j+1);
 
       if (dst->image == NULL)
@@ -759,10 +761,8 @@ static int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
 // Return 0 on error, non-0 on success
 static int wfc__remove_duplicate_tiles(struct wfc__tile **tiles, int *tile_cnt)
 {
-  wfcassert(*tile_cnt);
-
-  for (int i=0; i<*tile_cnt; i++)
-    (*tiles)[i].freq = 1;
+  /* for (int i=0; i<*tile_cnt; i++) */
+  /*   (*tiles)[i].freq = 1; */
 
   int unique_cnt = 1;
   for (int j=1; j<*tile_cnt; j++) {
@@ -988,13 +988,11 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
       new_cnt++;
     } else {
       int freq = wfc->tiles[possible_dst_tile_idx].freq;
-      double p = (double)freq / wfc->sum_freqs;
+      double p = ((double)freq) / wfc->sum_freqs;
       dst_cell->entropy += p*log(p);
       dst_cell->sum_freqs -= freq;
-      /* dst_cell->sum_log_freqs -= freq * log(freq); */
-      if (dst_cell->sum_freqs == 0) // no options left
+      if (dst_cell->sum_freqs == 0) // no options left TODO: remove
         return 0;
-      /* dst_cell->entropy = log(dst_cell->sum_freqs) - dst_cell->sum_log_freqs / dst_cell->sum_freqs; */
     }
   }
 
@@ -1047,6 +1045,7 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
     } else {
       wfc->cells[cell_idx].tiles[0] = wfc->cells[cell_idx].tiles[i];
       wfc->cells[cell_idx].tile_cnt = 1;
+      wfc->cells[cell_idx].sum_freqs = 0;
       wfc->cells[cell_idx].entropy = 0;
       wfc->collapsed_cell_cnt++;
       return 1;
@@ -1062,8 +1061,9 @@ static int wfc__next_cell(struct wfc *wfc)
   double min_entropy = DBL_MAX;
 
   for (int i=0; i<wfc->cell_cnt; i++) {
-    if (wfc->cells[i].tile_cnt != 1 && wfc->cells[i].entropy < min_entropy) {
-      min_entropy = wfc->cells[i].entropy;
+    double entropy = wfc->cells[i].entropy;// + rand() / (100000.0 * RAND_MAX);
+    if (wfc->cells[i].tile_cnt != 1 && entropy < min_entropy) {
+      min_entropy = entropy;
       min_idx = i;
     }
   }
@@ -1073,30 +1073,21 @@ static int wfc__next_cell(struct wfc *wfc)
 
 static void wfc__init_cells(struct wfc *wfc)
 {
-  double sum_freqs = 0.0;
+  int sum_freqs = 0.0;
   for (int i=0; i<wfc->tile_cnt; i++)
     sum_freqs += wfc->tiles[i].freq;
   wfc->sum_freqs = sum_freqs;
 
-  double entropy = 0.0;
+  double sum_plogp = 0.0;
   for (int i=0; i<wfc->tile_cnt; i++) {
-    double p = wfc->tiles[i].freq / sum_freqs;
-    entropy -= p*log(p);
+    double p = ((double)wfc->tiles[i].freq) / sum_freqs;
+    sum_plogp += p*log(p);
   }
-
-  /* int sum_freqs = 0; */
-  /* int sum_log_freqs = 0; */
-  /* for (int i=0; i<wfc->tile_cnt; i++) { */
-  /*   int freq = wfc->tiles[i].freq; */
-  /*   sum_freqs += freq; */
-  /*   sum_log_freqs += freq * log(freq); */
-  /* } */
-  /* double entropy = log(sum_freqs) - sum_log_freqs/sum_freqs; */
+  double entropy = -sum_plogp;
 
   for (int i=0; i<wfc->cell_cnt; i++) {
     wfc->cells[i].tile_cnt = wfc->tile_cnt;
     wfc->cells[i].sum_freqs = sum_freqs;
-    /* wfc->cells[i].sum_log_freqs = sum_log_freqs; */
     wfc->cells[i].entropy = entropy;
     for (int j=0; j<wfc->tile_cnt; j++) {
       wfc->cells[i].tiles[j] = j;
@@ -1120,7 +1111,8 @@ void wfc_init(struct wfc *wfc)
 // Return 0 on error (contradiction occurred)
 int wfc_run(struct wfc *wfc, int max_collapse_cnt)
 {
-  int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
+  //int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
+  int cell_idx = rand() % (wfc->output_height * wfc->output_width);
 
   while (1) {
     print_progress(wfc->collapsed_cell_cnt);
@@ -1200,7 +1192,8 @@ static struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
   *tile_cnt = xcnt * ycnt;
   if (xflip_tiles)
     *tile_cnt *= 2;
-  if (yflip_tiles)
+  // xflip_tiles + rotate_tiles generate yflip_tiles
+  if (!(xflip_tiles && rotate_tiles) && yflip_tiles)
     *tile_cnt *= 2;
   if (rotate_tiles)
     *tile_cnt *= 4;
@@ -1220,7 +1213,7 @@ static struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
     base_tile_cnt *= 2;
   }
 
-  if (yflip_tiles) {
+  if (!(xflip_tiles && rotate_tiles) && yflip_tiles) {
     if (!wfc__add_flipped_images(tiles, base_tile_cnt, 1))
       goto CLEANUP;
     base_tile_cnt *= 2;
