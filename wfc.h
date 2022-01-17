@@ -209,15 +209,6 @@ enum wfc__direction {WFC_UP,WFC_DOWN,WFC_LEFT,WFC_RIGHT};
 int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
 enum wfc__method {WFC_METHOD_OVERLAPPING, WFC_METHOD_TILED};
 
-// These are the rules. A matrix lookup of allowed tile pairs in each
-// direction. allowed_tiles[d][src_idx*tile_cnt + dst_idx] is 1 or 0
-// depending on whether dst_idx tile can be placed next to the src_idx
-// tile in the direction d.
-//
-// In the overlapping method tiles are allowed next to each other if
-// their content overlaps, excluding the edges.
-static int *allowed_tiles[4];
-
 // Rules are stored in tiles
 struct wfc__tile {
   struct wfc_image *image;
@@ -275,6 +266,15 @@ struct wfc {
                                // props forward to check whether a
                                // a candidate prop is already there
   int collapsed_cell_cnt;
+
+  // These are the rules. A matrix lookup of allowed tile pairs in each
+  // direction. allowed_tiles[d][src_idx*tile_cnt + dst_idx] is 1 or 0
+  // depending on whether dst_idx tile can be placed next to the src_idx
+  // tile in the direction d.
+  //
+  // In the overlapping method tiles are allowed next to each other if
+  // their content overlaps, excluding the edges.
+  int *allowed_tiles[4];
 };
 
 #ifdef WFC_DEBUG
@@ -874,13 +874,13 @@ static struct wfc__tile *wfc__create_tiles(int tile_cnt)
   return NULL;
 }
 
-static void wfc__destroy_allowed_tiles()
+static void wfc__destroy_allowed_tiles(int *allowed_tiles[])
 {
   free(allowed_tiles[0]);
 }
 
 // Return 0 on error
-static int wfc__create_allowed_tiles(int tile_cnt)
+static int wfc__create_allowed_tiles(int *allowed_tiles[], int tile_cnt)
 {
   allowed_tiles[0] = malloc(sizeof(*allowed_tiles[0]) * tile_cnt * tile_cnt * 4);
   for (int i=1; i<4; i++)
@@ -890,7 +890,7 @@ static int wfc__create_allowed_tiles(int tile_cnt)
 
  CLEANUP:
   p("wfc__create_allowed_tiles: error\n");
-  wfc__destroy_allowed_tiles();
+  wfc__destroy_allowed_tiles(allowed_tiles);
 
   return 0;
 }
@@ -945,7 +945,7 @@ static int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum w
   // the specified diretion
   int tile_cnt = wfc->tile_cnt;
   for (int i=0, cnt=cell->tile_cnt; i<cnt; i++) {
-    if (allowed_tiles[d][tiles[i] * tile_cnt + tile_idx]) {
+    if (wfc->allowed_tiles[d][tiles[i] * tile_cnt + tile_idx]) {
       return 1;
     }
   }
@@ -1138,7 +1138,7 @@ void wfc_destroy(struct wfc *wfc)
 {
   wfc__destroy_cells(wfc->cells, wfc->cell_cnt);
   wfc__destroy_tiles(wfc->tiles, wfc->tile_cnt);
-  wfc__destroy_allowed_tiles();
+  wfc__destroy_allowed_tiles(wfc->allowed_tiles);
   wfc__destroy_props(wfc->props);
   //wfc_img_destroy(wfc->image);
   free(wfc);
@@ -1150,7 +1150,7 @@ void wfc_destroy(struct wfc *wfc)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-static void wfc__compute_allowed_tiles(struct wfc__tile *tiles, int tile_cnt)
+static void wfc__compute_allowed_tiles(int *allowed_tiles[], struct wfc__tile *tiles, int tile_cnt)
 {
   for (int d=0; d<4; d++) {
     for (int i=0; i<tile_cnt; i++) {
@@ -1280,10 +1280,10 @@ struct wfc *wfc_overlapping(int output_width,
   if (wfc->tiles == NULL)
     goto CLEANUP;
 
-  if (!wfc__create_allowed_tiles(wfc->tile_cnt)) {
+  if (!wfc__create_allowed_tiles(wfc->allowed_tiles, wfc->tile_cnt)) {
       goto CLEANUP;
     }
-  wfc__compute_allowed_tiles(wfc->tiles, wfc->tile_cnt);
+  wfc__compute_allowed_tiles(wfc->allowed_tiles, wfc->tiles, wfc->tile_cnt);
 
   wfc->cells = wfc__create_cells(wfc->cell_cnt, wfc->tile_cnt);
   if (wfc->cells == NULL)
