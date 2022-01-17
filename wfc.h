@@ -224,7 +224,7 @@ struct wfc__cell {
   int tile_cnt;
 
   int sum_freqs;               // sum_* are cached values used to compute entropy
-  int sum_log_freqs;
+  /* int sum_log_freqs; */
   double entropy;              // Typically we collapse cell with smallest entropy next
 };
 
@@ -250,6 +250,7 @@ struct wfc {
   int rotate_tiles;
   struct wfc__tile *tiles;     // All available tiles
   int tile_cnt;
+  int sum_freqs;
 
   /* output */
 
@@ -987,11 +988,13 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
       new_cnt++;
     } else {
       int freq = wfc->tiles[possible_dst_tile_idx].freq;
+      double p = (double)freq / wfc->sum_freqs;
+      dst_cell->entropy += p*log(p);
       dst_cell->sum_freqs -= freq;
-      dst_cell->sum_log_freqs -= freq * log(freq);
+      /* dst_cell->sum_log_freqs -= freq * log(freq); */
       if (dst_cell->sum_freqs == 0) // no options left
         return 0;
-      dst_cell->entropy = log(dst_cell->sum_freqs) - dst_cell->sum_log_freqs / dst_cell->sum_freqs;
+      /* dst_cell->entropy = log(dst_cell->sum_freqs) - dst_cell->sum_log_freqs / dst_cell->sum_freqs; */
     }
   }
 
@@ -1070,19 +1073,30 @@ static int wfc__next_cell(struct wfc *wfc)
 
 static void wfc__init_cells(struct wfc *wfc)
 {
-  int sum_freqs = 0;
-  int sum_log_freqs = 0;
+  double sum_freqs = 0.0;
+  for (int i=0; i<wfc->tile_cnt; i++)
+    sum_freqs += wfc->tiles[i].freq;
+  wfc->sum_freqs = sum_freqs;
+
+  double entropy = 0.0;
   for (int i=0; i<wfc->tile_cnt; i++) {
-    int freq = wfc->tiles[i].freq;
-    sum_freqs += freq;
-    sum_log_freqs += freq * log(freq);
+    double p = wfc->tiles[i].freq / sum_freqs;
+    entropy -= p*log(p);
   }
-  double entropy = log(sum_freqs) - sum_log_freqs/sum_freqs;
+
+  /* int sum_freqs = 0; */
+  /* int sum_log_freqs = 0; */
+  /* for (int i=0; i<wfc->tile_cnt; i++) { */
+  /*   int freq = wfc->tiles[i].freq; */
+  /*   sum_freqs += freq; */
+  /*   sum_log_freqs += freq * log(freq); */
+  /* } */
+  /* double entropy = log(sum_freqs) - sum_log_freqs/sum_freqs; */
 
   for (int i=0; i<wfc->cell_cnt; i++) {
     wfc->cells[i].tile_cnt = wfc->tile_cnt;
     wfc->cells[i].sum_freqs = sum_freqs;
-    wfc->cells[i].sum_log_freqs = sum_log_freqs;
+    /* wfc->cells[i].sum_log_freqs = sum_log_freqs; */
     wfc->cells[i].entropy = entropy;
     for (int j=0; j<wfc->tile_cnt; j++) {
       wfc->cells[i].tiles[j] = j;
