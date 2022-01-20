@@ -1061,7 +1061,8 @@ static int wfc__next_cell(struct wfc *wfc)
   double min_entropy = DBL_MAX;
 
   for (int i=0; i<wfc->cell_cnt; i++) {
-    double entropy = wfc->cells[i].entropy;// + rand() / (100000.0 * RAND_MAX);
+    // Add small noise to break ties between tiles with the same entropy
+    double entropy = wfc->cells[i].entropy + rand() / (100000.0 * RAND_MAX);
     if (wfc->cells[i].tile_cnt != 1 && entropy < min_entropy) {
       min_entropy = entropy;
       min_idx = i;
