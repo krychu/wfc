@@ -14,7 +14,7 @@ input/output pairs:
 
 The WFC is often used for procedural map generation, but is not limited to this use-case.
 
-The library is very performant and includes a number of optimizations not found in other implementations. As an example, the generation of the above 128x128 images on a MacBook Air M1 (2020) took: 1.35, 0.92, 0.31, 7.7, 1.74, and 0.67 seconds respectively. This includes the image loading/saving time. The tile size was 3x3 and included all flips and rotations.
+The library is very performant and includes a number of optimizations not found in other implementations. As an example, the generation of the above 128x128 images on a MacBook Air M1 (2020) took: 1.35, 0.92, 0.31, 7.7, 1.74, and 0.67 seconds respectively. This includes the image loading/saving time. The tiles were 3x3 and included all flips and rotations.
 
 ## LANGUAGE BINDINGS
 
