@@ -4,11 +4,10 @@
 //
 // Author:  Krystian Samp (samp.krystian at gmail.com)
 // License: MIT
-// Version: 0.6
+// Version: 0.7
 //
 // This is an early version that supports the overlapping WFC method.
-// The tiled method is in the works. All feedback is very welcome and
-// best sent by email. Thanks.
+// All feedback is very welcome and best sent by email. Thanks.
 //
 //
 // HOW TO USE
@@ -135,7 +134,7 @@ struct wfc_image {
 
 struct wfc *wfc_overlapping(int output_width,              // Output width in pixels
                             int output_height,             // Output height in pixels
-                            struct wfc_image *image,       // Input image to be cut into tiles (takes ownership)
+                            struct wfc_image *image,       // Input image to be cut into tiles
                             int tile_width,                // Tile width in pixels
                             int tile_height,               // Tile height in pixels
                             int expand_input,              // Wrap input image on right and bottom
@@ -223,9 +222,12 @@ struct wfc__cell {
   int *tiles;                  // Possible tiles in the cell (initially all)
   int tile_cnt;
 
-  int sum_freqs;               // sum_* are cached values used to compute entropy
-  int sum_log_freqs;
-  double entropy;              // Typically we collapse cell with smallest entropy next
+  int sum_freqs;               // Sum of tile frequencies used to calculate
+                               // entropy and randomly pick a tile when
+                               // collapsing a tile.
+
+  double entropy;              // Shannon entropy. Cell with the smallest entropy
+                               // is picked to be collapsed next.
 };
 
 struct wfc__prop {
@@ -250,6 +252,7 @@ struct wfc {
   int rotate_tiles;
   struct wfc__tile *tiles;     // All available tiles
   int tile_cnt;
+  int sum_freqs;
 
   /* output */
 
@@ -690,6 +693,7 @@ static int wfc__add_overlapping_images(struct wfc__tile *tiles, struct wfc_image
   for (int y=0; y<ycnt; y++)
     for (int x=0; x<xcnt; x++) {
       struct wfc__tile *tile = &( tiles[y*xcnt + x] );
+      tile->freq = 1;
       tile->image = wfc__create_tile_image(image, x, y, tile_width, tile_height);
       if (tile->image == NULL)
         goto CLEANUP;
@@ -711,6 +715,7 @@ static int wfc__add_flipped_images(struct wfc__tile *tiles, int tile_idx, int fl
   for (int i=0; i<tile_idx; i++) {
     struct wfc__tile *src = &tiles[i];
     struct wfc__tile *dst = &tiles[tile_idx + i];
+    dst->freq = 1;
     if (flip_direction == 0)
       dst->image = wfc__img_flip_horizontally(src->image);
     else
@@ -737,6 +742,7 @@ static int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
     for (int j=0; j<3; j++) {
       struct wfc__tile *src = &tiles[i];
       struct wfc__tile *dst = &tiles[tile_idx + i*3 + j];
+      dst->freq = 1;
       dst->image = wfc__img_rotate90(src->image, j+1);
 
       if (dst->image == NULL)
@@ -758,11 +764,6 @@ static int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
 // Return 0 on error, non-0 on success
 static int wfc__remove_duplicate_tiles(struct wfc__tile **tiles, int *tile_cnt)
 {
-  wfcassert(*tile_cnt);
-
-  for (int i=0; i<*tile_cnt; i++)
-    (*tiles)[i].freq = 1;
-
   int unique_cnt = 1;
   for (int j=1; j<*tile_cnt; j++) {
     int unique = 1;
@@ -874,13 +875,13 @@ static struct wfc__tile *wfc__create_tiles(int tile_cnt)
   return NULL;
 }
 
-static void wfc__destroy_allowed_tiles(int *allowed_tiles[])
+static void wfc__destroy_allowed_tiles(int *allowed_tiles[4])
 {
   free(allowed_tiles[0]);
 }
 
 // Return 0 on error
-static int wfc__create_allowed_tiles(int *allowed_tiles[], int tile_cnt)
+static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
 {
   allowed_tiles[0] = malloc(sizeof(*allowed_tiles[0]) * tile_cnt * tile_cnt * 4);
   for (int i=1; i<4; i++)
@@ -987,11 +988,11 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
       new_cnt++;
     } else {
       int freq = wfc->tiles[possible_dst_tile_idx].freq;
+      double p = ((double)freq) / wfc->sum_freqs;
+      dst_cell->entropy += p*log(p);
       dst_cell->sum_freqs -= freq;
-      dst_cell->sum_log_freqs -= freq * log(freq);
-      if (dst_cell->sum_freqs == 0) // no options left
+      if (dst_cell->sum_freqs == 0) // no options left TODO: remove
         return 0;
-      dst_cell->entropy = log(dst_cell->sum_freqs) - dst_cell->sum_log_freqs / dst_cell->sum_freqs;
     }
   }
 
@@ -1044,6 +1045,7 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
     } else {
       wfc->cells[cell_idx].tiles[0] = wfc->cells[cell_idx].tiles[i];
       wfc->cells[cell_idx].tile_cnt = 1;
+      wfc->cells[cell_idx].sum_freqs = 0;
       wfc->cells[cell_idx].entropy = 0;
       wfc->collapsed_cell_cnt++;
       return 1;
@@ -1059,8 +1061,10 @@ static int wfc__next_cell(struct wfc *wfc)
   double min_entropy = DBL_MAX;
 
   for (int i=0; i<wfc->cell_cnt; i++) {
-    if (wfc->cells[i].tile_cnt != 1 && wfc->cells[i].entropy < min_entropy) {
-      min_entropy = wfc->cells[i].entropy;
+    // Add small noise to break ties between tiles with the same entropy
+    double entropy = wfc->cells[i].entropy + rand() / (100000.0 * RAND_MAX);
+    if (wfc->cells[i].tile_cnt != 1 && entropy < min_entropy) {
+      min_entropy = entropy;
       min_idx = i;
     }
   }
@@ -1070,19 +1074,21 @@ static int wfc__next_cell(struct wfc *wfc)
 
 static void wfc__init_cells(struct wfc *wfc)
 {
-  int sum_freqs = 0;
-  int sum_log_freqs = 0;
+  int sum_freqs = 0.0;
+  for (int i=0; i<wfc->tile_cnt; i++)
+    sum_freqs += wfc->tiles[i].freq;
+  wfc->sum_freqs = sum_freqs;
+
+  double sum_plogp = 0.0;
   for (int i=0; i<wfc->tile_cnt; i++) {
-    int freq = wfc->tiles[i].freq;
-    sum_freqs += freq;
-    sum_log_freqs += freq * log(freq);
+    double p = ((double)wfc->tiles[i].freq) / sum_freqs;
+    sum_plogp += p*log(p);
   }
-  double entropy = log(sum_freqs) - sum_log_freqs/sum_freqs;
+  double entropy = -sum_plogp;
 
   for (int i=0; i<wfc->cell_cnt; i++) {
     wfc->cells[i].tile_cnt = wfc->tile_cnt;
     wfc->cells[i].sum_freqs = sum_freqs;
-    wfc->cells[i].sum_log_freqs = sum_log_freqs;
     wfc->cells[i].entropy = entropy;
     for (int j=0; j<wfc->tile_cnt; j++) {
       wfc->cells[i].tiles[j] = j;
@@ -1106,7 +1112,8 @@ void wfc_init(struct wfc *wfc)
 // Return 0 on error (contradiction occurred)
 int wfc_run(struct wfc *wfc, int max_collapse_cnt)
 {
-  int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
+  //int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
+  int cell_idx = rand() % (wfc->output_height * wfc->output_width);
 
   while (1) {
     print_progress(wfc->collapsed_cell_cnt);
@@ -1149,7 +1156,7 @@ void wfc_destroy(struct wfc *wfc)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-static void wfc__compute_allowed_tiles(int *allowed_tiles[], struct wfc__tile *tiles, int tile_cnt)
+static void wfc__compute_allowed_tiles(int *allowed_tiles[4], struct wfc__tile *tiles, int tile_cnt)
 {
   for (int d=0; d<4; d++) {
     for (int i=0; i<tile_cnt; i++) {
@@ -1186,7 +1193,8 @@ static struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
   *tile_cnt = xcnt * ycnt;
   if (xflip_tiles)
     *tile_cnt *= 2;
-  if (yflip_tiles)
+  // xflip_tiles + rotate_tiles generate yflip_tiles
+  if (!(xflip_tiles && rotate_tiles) && yflip_tiles)
     *tile_cnt *= 2;
   if (rotate_tiles)
     *tile_cnt *= 4;
@@ -1206,7 +1214,7 @@ static struct wfc__tile *wfc__create_tiles_overlapping(struct wfc_image *image,
     base_tile_cnt *= 2;
   }
 
-  if (yflip_tiles) {
+  if (!(xflip_tiles && rotate_tiles) && yflip_tiles) {
     if (!wfc__add_flipped_images(tiles, base_tile_cnt, 1))
       goto CLEANUP;
     base_tile_cnt *= 2;
@@ -1337,7 +1345,7 @@ struct wfc *wfc_overlapping(int output_width,
 
   the MIT License (MIT)
 
-  Copyright (c) 2020 Krystian Samp
+  Copyright (c) 2020-2022 Krystian Samp
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
