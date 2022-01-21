@@ -3,7 +3,7 @@
 Single-file Wave Function Collapse library in C, plus a command-line tool
 
 - License: MIT
-- Version: 0.6
+- Version: 0.7
 
 This is an early version that supports the overlapping WFC method.
 The method takes an input image and generates output image which is
