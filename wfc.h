@@ -764,9 +764,6 @@ static int wfc__add_rotated_images(struct wfc__tile *tiles, int tile_idx)
 // Return 0 on error, non-0 on success
 static int wfc__remove_duplicate_tiles(struct wfc__tile **tiles, int *tile_cnt)
 {
-  /* for (int i=0; i<*tile_cnt; i++) */
-  /*   (*tiles)[i].freq = 1; */
-
   int unique_cnt = 1;
   for (int j=1; j<*tile_cnt; j++) {
     int unique = 1;
@@ -1348,7 +1345,7 @@ struct wfc *wfc_overlapping(int output_width,
 
   the MIT License (MIT)
 
-  Copyright (c) 2020 Krystian Samp
+  Copyright (c) 2020-2022 Krystian Samp
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
