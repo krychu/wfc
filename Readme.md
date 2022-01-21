@@ -6,15 +6,19 @@ Single-file Wave Function Collapse library in C, plus a command-line tool
 - Version: 0.7
 
 This is an early version that supports the overlapping WFC method.
-The method takes an input image and generates output image which is
+The method takes a small input image and generates a larger output image which is
 locally similar to the input image. Here're a few examples of
 input/output pairs:
 
-<img width="950px" src="https://user-images.githubusercontent.com/947457/116161084-6f546e00-a6f3-11eb-87d8-3ed9c2c7e26c.png">
+<img width="950px" src="https://user-images.githubusercontent.com/947457/150605257-ba54c0fe-734d-4458-89d6-7fd54ea99495.png">
 
-For a good read on WFC see [this
-article](https://www.gridbugs.org/wave-function-collapse/). It's particularly
-useful for procedural generation of game levels.
+The WFC is often used for procedural map generation, but is not limited to this use-case.
+
+The library is very performant and includes a number of optimizations not found in other implementations. As an example, the generation of the above 128x128 images on a MacBook Air M1 (2020) took: 1.35, 0.92, 0.31, 7.7, 1.74, and 0.67 seconds respectively. This includes the image loading/saving time. The tile size was 3x3 and included all flips and rotations.
+
+## LANGUAGE BINDINGS
+
+- [Rust bindings](https://crates.io/crates/wfc-rs) -- by [Ryan Noah](https://github.com/nsmryan)
 
 ## HOW TO USE THE LIBRARY
 
@@ -146,7 +150,7 @@ Run `./wfc` to see available options
 Basic usage:
 
 ```
-        ./wfc -m overlapping -w 128 -h 128 input.png output.png
+        ./wfc -m overlapping samples/wrinkles.png output.png
 ```
 
 ## THANKS
