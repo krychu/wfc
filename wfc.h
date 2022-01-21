@@ -4,11 +4,10 @@
 //
 // Author:  Krystian Samp (samp.krystian at gmail.com)
 // License: MIT
-// Version: 0.6
+// Version: 0.7
 //
 // This is an early version that supports the overlapping WFC method.
-// The tiled method is in the works. All feedback is very welcome and
-// best sent by email. Thanks.
+// All feedback is very welcome and best sent by email. Thanks.
 //
 //
 // HOW TO USE
@@ -135,7 +134,7 @@ struct wfc_image {
 
 struct wfc *wfc_overlapping(int output_width,              // Output width in pixels
                             int output_height,             // Output height in pixels
-                            struct wfc_image *image,       // Input image to be cut into tiles (takes ownership)
+                            struct wfc_image *image,       // Input image to be cut into tiles
                             int tile_width,                // Tile width in pixels
                             int tile_height,               // Tile height in pixels
                             int expand_input,              // Wrap input image on right and bottom
@@ -223,8 +222,12 @@ struct wfc__cell {
   int *tiles;                  // Possible tiles in the cell (initially all)
   int tile_cnt;
 
-  int sum_freqs;               // sum_* are cached values used to compute entropy
-  double entropy;              // Typically we collapse cell with smallest entropy next
+  int sum_freqs;               // Sum of tile frequencies used to calculate
+                               // entropy and randomly pick a tile when
+                               // collapsing a tile.
+
+  double entropy;              // Shannon entropy. Cell with the smallest entropy
+                               // is picked to be collapsed next.
 };
 
 struct wfc__prop {
@@ -875,13 +878,13 @@ static struct wfc__tile *wfc__create_tiles(int tile_cnt)
   return NULL;
 }
 
-static void wfc__destroy_allowed_tiles(int *allowed_tiles[])
+static void wfc__destroy_allowed_tiles(int *allowed_tiles[4])
 {
   free(allowed_tiles[0]);
 }
 
 // Return 0 on error
-static int wfc__create_allowed_tiles(int *allowed_tiles[], int tile_cnt)
+static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
 {
   allowed_tiles[0] = malloc(sizeof(*allowed_tiles[0]) * tile_cnt * tile_cnt * 4);
   for (int i=1; i<4; i++)
@@ -1156,7 +1159,7 @@ void wfc_destroy(struct wfc *wfc)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-static void wfc__compute_allowed_tiles(int *allowed_tiles[], struct wfc__tile *tiles, int tile_cnt)
+static void wfc__compute_allowed_tiles(int *allowed_tiles[4], struct wfc__tile *tiles, int tile_cnt)
 {
   for (int d=0; d<4; d++) {
     for (int i=0; i<tile_cnt; i++) {
