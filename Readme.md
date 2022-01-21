@@ -7,14 +7,14 @@ Single-file Wave Function Collapse library in C, plus a command-line tool
 
 This is an early version that supports the overlapping WFC method.
 The method takes a small input image and generates a larger output image which is
-locally similar to the input image. Here're a few examples of
+locally similar to the input image. A few examples of
 input/output pairs:
 
 <img width="950px" src="https://user-images.githubusercontent.com/947457/150605257-ba54c0fe-734d-4458-89d6-7fd54ea99495.png">
 
 The WFC is often used for procedural map generation, but is not limited to this use-case.
 
-The library is very performant and includes a number of optimizations not found in other implementations. As an example, the generation of the above 128x128 images on a MacBook Air M1 (2020) took: 1.35, 0.92, 0.31, 7.7, 1.74, and 0.67 seconds respectively. This includes the image loading/saving time. The tiles were 3x3 and included all flips and rotations.
+The library is very performant and includes a number of optimizations not found in other implementations. As an example, the generation of the above 128x128 images (from 3x3 patterns, flipped, and rotated), on a MacBook Air M1 (2020) took: 1.35, 0.92, 0.31, 7.7, 1.74, and 0.67 seconds respectively. This includes the image loading/saving time.
 
 ## LANGUAGE BINDINGS
 
