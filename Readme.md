@@ -18,7 +18,7 @@ The library is very performant and includes a number of optimizations not found 
 
 ## LANGUAGE BINDINGS
 
-- [Rust](https://crates.io/crates/wfc-rs) -- by [Ryan Noah](https://github.com/nsmryan)
+- [Rust](https://crates.io/crates/wfc-rs) -- by [Noah Ryan](https://github.com/nsmryan)
 
 ## HOW TO USE THE LIBRARY
 
