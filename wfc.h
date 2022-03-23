@@ -776,10 +776,17 @@ static int wfc__remove_duplicate_tiles(struct wfc__tile **tiles, int *tile_cnt)
     }
 
     if (unique) {
-      (*tiles)[unique_cnt] = (*tiles)[j];
+      if (unique_cnt != j) {
+        struct wfc__tile tmp = (*tiles)[unique_cnt];
+        (*tiles)[unique_cnt] = (*tiles)[j];
+        (*tiles)[j] = tmp;
+      }
       unique_cnt++;
     }
   }
+
+  for (int i=unique_cnt; i<*tile_cnt; i++)
+    wfc_img_destroy((*tiles)[i].image);
 
   struct wfc__tile *unique_tiles = realloc(*tiles, sizeof(**tiles) * unique_cnt);
   if (unique_tiles == NULL) {
