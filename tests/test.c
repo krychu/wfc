@@ -1,4 +1,4 @@
-// WFC Test Harness - Unit and integration tests
+// wfc tests
 //
 // Run via: make test
 
@@ -474,8 +474,8 @@ int main(int argc, char **argv)
     else if (strcmp(argv[i], "--integration") == 0) { run_unit = 0; run_integration = 1; }
   }
 
-  printf("WFC Test Harness\n");
-  printf("================\n\n");
+  printf("wfc tests\n");
+  printf("=========\n\n");
 
   if (run_unit) {
     printf("Unit tests:\n");
