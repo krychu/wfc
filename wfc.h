@@ -530,19 +530,18 @@ static struct wfc_image *wfc__img_rotate90(struct wfc_image *image, int n) {
 
   for (int y=0; y<image->height; y++) {
     for (int x=0; x<image->width; x++) {
-      unsigned char components[4];
-      memcpy(components, &(image->data[y * image->width * image->component_cnt + x * image->component_cnt]), image->component_cnt);
+      unsigned char *src = &(image->data[y * image->width * image->component_cnt + x * image->component_cnt]);
       if (n==1) {
         memcpy(&(copy->data[x * copy->width * copy->component_cnt + (copy->width - y - 1) * copy->component_cnt]),
-               components,
+               src,
                image->component_cnt);
       } else if (n==2) {
         memcpy(&(copy->data[(copy->height - y - 1) * copy->width * copy->component_cnt + (copy->width - x - 1) * copy->component_cnt]),
-               components,
+               src,
                image->component_cnt);
       } else if (n==3) {
         memcpy(&(copy->data[(copy->height - x - 1) * copy->width * copy->component_cnt + y * copy->component_cnt]),
-               components,
+               src,
                image->component_cnt);
       } else {
         printf("error: wfc__img_rotate90, n=%d\n", n);
@@ -646,7 +645,7 @@ int wfc_export_tiles(struct wfc *wfc, const char *path)
 {
   char filename[128];
   for (int i=0; i<wfc->tile_cnt; i++) {
-    sprintf(filename, "%s/%d.png", path, i);
+    snprintf(filename, sizeof(filename), "%s/%d.png", path, i);
     struct wfc__tile *tile = &wfc->tiles[i];
     if (wfc_img_save(tile->image, filename) == 0) {
       p("wfc_export_tiles: error\n");
