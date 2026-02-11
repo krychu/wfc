@@ -1,0 +1,16 @@
+# Build artifacts
+wfc
+wfc.o
+tests/test
+tests/bench
+
+# STB headers (downloaded via `make deps`)
+stb_image.h
+stb_image_write.h
+
+# Test output (regenerated each run)
+tests/output/*.png
+
+# Nix
+result
+.direnv/
