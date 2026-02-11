@@ -459,9 +459,6 @@ static int wfc__img_cmpoverlap(struct wfc_image *a, struct wfc_image *b, enum wf
   };
 
   for (int y=0; y<height; y++) {
-    int a_y = a_offy + y;
-    int b_y = b_offy + y;
-
     if (memcmp(&(a->data[(y+a_offy)*a->width*a->component_cnt + a_offx*a->component_cnt]),
                 &(b->data[(y+b_offy)*a->width*a->component_cnt + b_offx*a->component_cnt]),
                 width*a->component_cnt)) {
@@ -606,7 +603,7 @@ struct wfc_image *wfc_output_image(struct wfc *wfc)
   struct wfc_image *image = wfc_img_create(wfc->output_width, wfc->output_height, wfc->image->component_cnt);
   if (image == NULL) {
     p("wfc_export: error\n");
-    return 0;
+    return NULL;
   }
 
   for (int y=0; y<wfc->output_height; y++) {
@@ -817,6 +814,8 @@ static struct wfc__prop *wfc__create_props(int cell_cnt, int tile_cnt)
 
 static void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt)
 {
+  if (cells == NULL)
+    return;
   free(cells[0].tiles);
   free(cells);
 }
@@ -832,11 +831,10 @@ static struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
     cells[i].tiles = NULL;
 
   cells[0].tiles = malloc(sizeof(*(cells[0].tiles)) * tile_cnt * cell_cnt);
-  for (int i=1; i<cell_cnt; i++) {
+  if (cells[0].tiles == NULL)
+    goto CLEANUP;
+  for (int i=1; i<cell_cnt; i++)
     cells[i].tiles = cells[0].tiles + i * tile_cnt;
-    if (cells[i].tiles == NULL)
-      goto CLEANUP;
-  }
 
   return cells;
 
@@ -889,6 +887,8 @@ static void wfc__destroy_allowed_tiles(int *allowed_tiles[4])
 static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
 {
   allowed_tiles[0] = malloc(sizeof(*allowed_tiles[0]) * tile_cnt * tile_cnt * 4);
+  if (allowed_tiles[0] == NULL)
+    goto CLEANUP;
   for (int i=1; i<4; i++)
     allowed_tiles[i] = allowed_tiles[0] + i * tile_cnt * tile_cnt;
 
