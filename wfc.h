@@ -172,8 +172,6 @@ void wfc_destroy(struct wfc *wfc);
 #include <time.h>
 #include <assert.h>
 
-#define WFC_MAX_PROP_CNT 1000
-
 #ifndef WFC_USE_STB
 
 #define wfc_img_save(...) wfc__nofunc_int("wfc_img_save", "requires stb", __VA_ARGS__)
@@ -205,7 +203,7 @@ void wfc_destroy(struct wfc *wfc);
 #endif
 
 enum wfc__direction {WFC_UP,WFC_DOWN,WFC_LEFT,WFC_RIGHT};
-int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
+static int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
 enum wfc__method {WFC_METHOD_OVERLAPPING, WFC_METHOD_TILED};
 
 // Rules are stored in tiles
@@ -285,7 +283,7 @@ static const char *wfc__direction_strings[4] = {"up","down","left","right"};
 
 static void wfc__print_prop(struct wfc__prop *p, const char *prefix)
 {
-  printf("%s%d -> %s -> %d\n", prefix, p->src_cell_idx, direction_strings[p->direction], p->dst_cell_idx);
+  printf("%s%d -> %s -> %d\n", prefix, p->src_cell_idx, wfc__direction_strings[p->direction], p->dst_cell_idx);
 }
 
 static void wfc__print_props(struct wfc__prop *p, int prop_cnt, const char *prefix)
@@ -391,7 +389,7 @@ struct wfc_image *wfc_img_create(int width, int height, int component_cnt)
   image->data = malloc(sizeof(*image->data) * width * height * component_cnt);
   if (image->data == NULL) {
     p("wfc_img_create: error\n");
-    free(image->data);
+    free(image);
     return NULL;
   }
 
@@ -811,9 +809,9 @@ static void wfc__destroy_props(struct wfc__prop *props)
   free(props);
 }
 
-static struct wfc__prop *wfc__create_props(int cell_cnt)
+static struct wfc__prop *wfc__create_props(int cell_cnt, int tile_cnt)
 {
-  struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * WFC_MAX_PROP_CNT);
+  struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * tile_cnt * 3);
   return props;
 }
 
@@ -905,8 +903,6 @@ static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
 
 static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
 {
-  // TODO: check for wfc->prop_cnt == WFC_MAX_PROP_CNT
-
   struct wfc__prop *p = &( wfc->props[wfc->prop_cnt] );
   (wfc->prop_cnt)++;
   p->src_cell_idx = src_cell_idx;
@@ -1303,7 +1299,7 @@ struct wfc *wfc_overlapping(int output_width,
   if (wfc->cells == NULL)
     goto CLEANUP;
 
-  wfc->props = wfc__create_props(wfc->cell_cnt);
+  wfc->props = wfc__create_props(wfc->cell_cnt, wfc->tile_cnt);
   if (wfc->props == NULL)
     goto CLEANUP;
 
