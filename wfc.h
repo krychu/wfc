@@ -263,9 +263,8 @@ struct wfc {
 
   struct wfc__prop *props;     // Propagation updates
   int prop_cnt;
-  int prop_idx;                // Current index into props, used to scan
-                               // props forward to check whether a
-                               // a candidate prop is already there
+  unsigned char *prop_pending; // prop_pending[cell * 4 + dir]: 1 if a prop
+                               // with that (src_cell, direction) is queued
   int collapsed_cell_cnt;
 
   // These are the rules. A matrix lookup of allowed tile pairs in each
@@ -907,6 +906,7 @@ static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, e
   p->src_cell_idx = src_cell_idx;
   p->dst_cell_idx = dst_cell_idx;
   p->direction = direction;
+  wfc->prop_pending[src_cell_idx * 4 + direction] = 1;
 }
 
 // add prop to update cell above the cell_idx
@@ -961,13 +961,7 @@ static int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum w
 //
 // 1 - prop is added, 0 - prop is not added
 static int wfc__is_prop_pending(struct wfc *wfc, int cell_idx, enum wfc__direction d) {
-  for (int i=wfc->prop_idx+1; i<wfc->prop_cnt; i++) {
-    struct wfc__prop *p = &( wfc->props[i] );
-    if (p->src_cell_idx == cell_idx && p->direction == d) {
-      return 1;
-    }
-  }
-  return 0;
+  return wfc->prop_pending[cell_idx * 4 + d];
 }
 
 // Updates tiles in the destination cell to those that are allowed by the source cell
@@ -1026,8 +1020,8 @@ static int wfc__propagate(struct wfc *wfc, int cell_idx)
   wfc__add_prop_right(wfc, cell_idx);
 
   for (int i=0; i<wfc->prop_cnt; i++) {
-    wfc->prop_idx = i;
     struct wfc__prop *p = &( wfc->props[i] );
+    wfc->prop_pending[p->src_cell_idx * 4 + p->direction] = 0;
     if (!wfc__propagate_prop(wfc, p)) {
       return 0;
     }
@@ -1106,6 +1100,7 @@ void wfc_init(struct wfc *wfc)
   wfc->seed = (unsigned int) time(NULL); // 1641743677
   srand(wfc->seed);
   wfc->collapsed_cell_cnt = 0;
+  memset(wfc->prop_pending, 0, wfc->cell_cnt * 4);
   wfc__init_cells(wfc);
 }
 
@@ -1149,6 +1144,7 @@ void wfc_destroy(struct wfc *wfc)
   wfc__destroy_tiles(wfc->tiles, wfc->tile_cnt);
   wfc__destroy_allowed_tiles(wfc->allowed_tiles);
   wfc__destroy_props(wfc->props);
+  free(wfc->prop_pending);
   free(wfc);
 }
 
@@ -1265,6 +1261,7 @@ struct wfc *wfc_overlapping(int output_width,
   wfc->cells = NULL;
   wfc->tiles = NULL;
   wfc->props = NULL;
+  wfc->prop_pending = NULL;
   wfc->output_width = output_width;
   wfc->output_height = output_height;
   wfc->cell_cnt = output_width * output_height;
@@ -1300,6 +1297,10 @@ struct wfc *wfc_overlapping(int output_width,
 
   wfc->props = wfc__create_props(wfc->cell_cnt, wfc->tile_cnt);
   if (wfc->props == NULL)
+    goto CLEANUP;
+
+  wfc->prop_pending = calloc(wfc->cell_cnt * 4, sizeof(unsigned char));
+  if (wfc->prop_pending == NULL)
     goto CLEANUP;
 
   wfc_init(wfc);
