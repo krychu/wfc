@@ -172,8 +172,6 @@ void wfc_destroy(struct wfc *wfc);
 #include <time.h>
 #include <assert.h>
 
-#define WFC_MAX_PROP_CNT 1000
-
 #ifndef WFC_USE_STB
 
 #define wfc_img_save(...) wfc__nofunc_int("wfc_img_save", "requires stb", __VA_ARGS__)
@@ -205,7 +203,7 @@ void wfc_destroy(struct wfc *wfc);
 #endif
 
 enum wfc__direction {WFC_UP,WFC_DOWN,WFC_LEFT,WFC_RIGHT};
-int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
+static int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
 enum wfc__method {WFC_METHOD_OVERLAPPING, WFC_METHOD_TILED};
 
 // Rules are stored in tiles
@@ -285,7 +283,7 @@ static const char *wfc__direction_strings[4] = {"up","down","left","right"};
 
 static void wfc__print_prop(struct wfc__prop *p, const char *prefix)
 {
-  printf("%s%d -> %s -> %d\n", prefix, p->src_cell_idx, direction_strings[p->direction], p->dst_cell_idx);
+  printf("%s%d -> %s -> %d\n", prefix, p->src_cell_idx, wfc__direction_strings[p->direction], p->dst_cell_idx);
 }
 
 static void wfc__print_props(struct wfc__prop *p, int prop_cnt, const char *prefix)
@@ -391,7 +389,7 @@ struct wfc_image *wfc_img_create(int width, int height, int component_cnt)
   image->data = malloc(sizeof(*image->data) * width * height * component_cnt);
   if (image->data == NULL) {
     p("wfc_img_create: error\n");
-    free(image->data);
+    free(image);
     return NULL;
   }
 
@@ -461,9 +459,6 @@ static int wfc__img_cmpoverlap(struct wfc_image *a, struct wfc_image *b, enum wf
   };
 
   for (int y=0; y<height; y++) {
-    int a_y = a_offy + y;
-    int b_y = b_offy + y;
-
     if (memcmp(&(a->data[(y+a_offy)*a->width*a->component_cnt + a_offx*a->component_cnt]),
                 &(b->data[(y+b_offy)*a->width*a->component_cnt + b_offx*a->component_cnt]),
                 width*a->component_cnt)) {
@@ -535,19 +530,18 @@ static struct wfc_image *wfc__img_rotate90(struct wfc_image *image, int n) {
 
   for (int y=0; y<image->height; y++) {
     for (int x=0; x<image->width; x++) {
-      unsigned char components[4];
-      memcpy(components, &(image->data[y * image->width * image->component_cnt + x * image->component_cnt]), image->component_cnt);
+      unsigned char *src = &(image->data[y * image->width * image->component_cnt + x * image->component_cnt]);
       if (n==1) {
         memcpy(&(copy->data[x * copy->width * copy->component_cnt + (copy->width - y - 1) * copy->component_cnt]),
-               components,
+               src,
                image->component_cnt);
       } else if (n==2) {
         memcpy(&(copy->data[(copy->height - y - 1) * copy->width * copy->component_cnt + (copy->width - x - 1) * copy->component_cnt]),
-               components,
+               src,
                image->component_cnt);
       } else if (n==3) {
         memcpy(&(copy->data[(copy->height - x - 1) * copy->width * copy->component_cnt + y * copy->component_cnt]),
-               components,
+               src,
                image->component_cnt);
       } else {
         printf("error: wfc__img_rotate90, n=%d\n", n);
@@ -608,7 +602,7 @@ struct wfc_image *wfc_output_image(struct wfc *wfc)
   struct wfc_image *image = wfc_img_create(wfc->output_width, wfc->output_height, wfc->image->component_cnt);
   if (image == NULL) {
     p("wfc_export: error\n");
-    return 0;
+    return NULL;
   }
 
   for (int y=0; y<wfc->output_height; y++) {
@@ -651,7 +645,7 @@ int wfc_export_tiles(struct wfc *wfc, const char *path)
 {
   char filename[128];
   for (int i=0; i<wfc->tile_cnt; i++) {
-    sprintf(filename, "%s/%d.png", path, i);
+    snprintf(filename, sizeof(filename), "%s/%d.png", path, i);
     struct wfc__tile *tile = &wfc->tiles[i];
     if (wfc_img_save(tile->image, filename) == 0) {
       p("wfc_export_tiles: error\n");
@@ -811,14 +805,16 @@ static void wfc__destroy_props(struct wfc__prop *props)
   free(props);
 }
 
-static struct wfc__prop *wfc__create_props(int cell_cnt)
+static struct wfc__prop *wfc__create_props(int cell_cnt, int tile_cnt)
 {
-  struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * WFC_MAX_PROP_CNT);
+  struct wfc__prop *props = malloc(sizeof(*props) * cell_cnt * tile_cnt * 3);
   return props;
 }
 
 static void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt)
 {
+  if (cells == NULL)
+    return;
   free(cells[0].tiles);
   free(cells);
 }
@@ -834,11 +830,10 @@ static struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
     cells[i].tiles = NULL;
 
   cells[0].tiles = malloc(sizeof(*(cells[0].tiles)) * tile_cnt * cell_cnt);
-  for (int i=1; i<cell_cnt; i++) {
+  if (cells[0].tiles == NULL)
+    goto CLEANUP;
+  for (int i=1; i<cell_cnt; i++)
     cells[i].tiles = cells[0].tiles + i * tile_cnt;
-    if (cells[i].tiles == NULL)
-      goto CLEANUP;
-  }
 
   return cells;
 
@@ -891,6 +886,8 @@ static void wfc__destroy_allowed_tiles(int *allowed_tiles[4])
 static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
 {
   allowed_tiles[0] = malloc(sizeof(*allowed_tiles[0]) * tile_cnt * tile_cnt * 4);
+  if (allowed_tiles[0] == NULL)
+    goto CLEANUP;
   for (int i=1; i<4; i++)
     allowed_tiles[i] = allowed_tiles[0] + i * tile_cnt * tile_cnt;
 
@@ -905,8 +902,6 @@ static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
 
 static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
 {
-  // TODO: check for wfc->prop_cnt == WFC_MAX_PROP_CNT
-
   struct wfc__prop *p = &( wfc->props[wfc->prop_cnt] );
   (wfc->prop_cnt)++;
   p->src_cell_idx = src_cell_idx;
@@ -1303,7 +1298,7 @@ struct wfc *wfc_overlapping(int output_width,
   if (wfc->cells == NULL)
     goto CLEANUP;
 
-  wfc->props = wfc__create_props(wfc->cell_cnt);
+  wfc->props = wfc__create_props(wfc->cell_cnt, wfc->tile_cnt);
   if (wfc->props == NULL)
     goto CLEANUP;
 

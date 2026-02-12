@@ -1,0 +1,16 @@
+# build
+wfc
+wfc.o
+tests/test
+tests/bench
+
+# deps
+stb_image.h
+stb_image_write.h
+
+# test output
+tests/output/*.png
+
+# nix
+result
+.direnv/
