@@ -304,6 +304,9 @@ struct wfc__tile {
                                // count of tile occurrences in the input image.
                                // It affects the probability of the tile being
                                // selected when collapsing a cell.
+
+  double plogp;                // Precomputed (freq/sum_freqs)*log(freq/sum_freqs)
+                               // for incremental entropy updates.
 };
 
 struct wfc__cell {
@@ -1065,10 +1068,8 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
     if (!total) {
       wfc__bitset_clear(dst_cell->tiles, t);
       dst_cell->tile_cnt--;
-      int freq = wfc->tiles[t].freq;
-      double pp = ((double)freq) / wfc->sum_freqs;
-      dst_cell->entropy += pp * log(pp);
-      dst_cell->sum_freqs -= freq;
+      dst_cell->entropy += wfc->tiles[t].plogp;
+      dst_cell->sum_freqs -= wfc->tiles[t].freq;
       if (dst_cell->sum_freqs == 0)
         return 0;
     }
@@ -1178,7 +1179,9 @@ static void wfc__init_cells(struct wfc *wfc)
   double sum_plogp = 0.0;
   for (int i=0; i<wfc->tile_cnt; i++) {
     double p = ((double)wfc->tiles[i].freq) / sum_freqs;
-    sum_plogp += p*log(p);
+    double plogp = p * log(p);
+    wfc->tiles[i].plogp = plogp;
+    sum_plogp += plogp;
   }
   double entropy = -sum_plogp;
 
