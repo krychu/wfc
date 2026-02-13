@@ -16,7 +16,7 @@
 #define WFC_USE_STB
 #include "wfc.h"
 
-#define FIXED_SEED 5
+#define FIXED_SEED 2
 #define BENCH_RUNS 5
 #define BENCH_OUTPUT_SIZE 128
 
@@ -89,7 +89,7 @@ int main(void)
       }
 
       wfc->seed = FIXED_SEED;
-      srand(wfc->seed);
+      wfc__seed_rng(wfc->rng, wfc->seed);
       wfc->collapsed_cell_cnt = 0;
       wfc__init_cells(wfc);
 

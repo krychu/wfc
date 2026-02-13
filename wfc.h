@@ -209,6 +209,54 @@ enum wfc__method {WFC_METHOD_OVERLAPPING, WFC_METHOD_TILED};
 // Number of unsigned words needed to pack tile_cnt bits
 #define WFC_BITSET_LEN(tile_cnt) (((tile_cnt) + 31) / 32)
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// PRNG: xoshiro128** (Blackman & Vigna, public domain)
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static inline unsigned wfc__rotl32(unsigned x, int k)
+{
+  return (x << k) | (x >> (32 - k));
+}
+
+// xoshiro128**: 32-bit output, 128-bit state, period 2^128-1
+static inline unsigned wfc__rand32(unsigned s[4])
+{
+  unsigned result = wfc__rotl32(s[1] * 5, 7) * 9;
+  unsigned t = s[1] << 9;
+
+  s[2] ^= s[0];
+  s[3] ^= s[1];
+  s[1] ^= s[2];
+  s[0] ^= s[3];
+
+  s[2] ^= t;
+  s[3] = wfc__rotl32(s[3], 11);
+
+  return result;
+}
+
+// splitmix64: used to seed xoshiro128** from a single 64-bit value
+static inline unsigned long long wfc__splitmix64(unsigned long long *state)
+{
+  unsigned long long z = (*state += 0x9e3779b97f4a7c15ULL);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+  return z ^ (z >> 31);
+}
+
+static inline void wfc__seed_rng(unsigned s[4], unsigned long long seed)
+{
+  unsigned long long sm = seed;
+  unsigned long long z0 = wfc__splitmix64(&sm);
+  unsigned long long z1 = wfc__splitmix64(&sm);
+  s[0] = (unsigned)(z0);
+  s[1] = (unsigned)(z0 >> 32);
+  s[2] = (unsigned)(z1);
+  s[3] = (unsigned)(z1 >> 32);
+}
+
 static inline int wfc__bitset_get(const unsigned *bs, int idx)
 {
   return (bs[idx / 32] >> (idx % 32)) & 1;
@@ -316,6 +364,8 @@ struct wfc {
   // their content overlaps, excluding the edges.
   unsigned *allowed_tiles[4];
   int bitset_len;              // Words per bitset: WFC_BITSET_LEN(tile_cnt)
+
+  unsigned rng[4];             // xoshiro128** state
 };
 
 #ifdef WFC_DEBUG
@@ -1065,7 +1115,7 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
 {
   struct wfc__cell *cell = &wfc->cells[cell_idx];
   int bitset_len = wfc->bitset_len;
-  int remaining = rand() % cell->sum_freqs;
+  int remaining = wfc__rand32(wfc->rng) % cell->sum_freqs;
   int bit = -1;
   while ((bit = wfc__bitset_next(cell->tiles, bitset_len, bit + 1)) >= 0) {
     int freq = wfc->tiles[bit].freq;
@@ -1087,19 +1137,35 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
 
 static int wfc__next_cell(struct wfc *wfc)
 {
-  int min_idx = -1;
+  // Pass 1: find minimum entropy among uncollapsed cells and count ties
   double min_entropy = DBL_MAX;
+  int tie_cnt = 0;
 
   for (int i=0; i<wfc->cell_cnt; i++) {
-    // Add small noise to break ties between tiles with the same entropy
-    double entropy = wfc->cells[i].entropy + rand() / (100000.0 * RAND_MAX);
-    if (wfc->cells[i].tile_cnt != 1 && entropy < min_entropy) {
-      min_entropy = entropy;
-      min_idx = i;
+    if (wfc->cells[i].tile_cnt <= 1) continue;
+    double e = wfc->cells[i].entropy;
+    if (e < min_entropy) {
+      min_entropy = e;
+      tie_cnt = 1;
+    } else if (e == min_entropy) {
+      tie_cnt++;
     }
   }
 
-  return min_idx;
+  if (tie_cnt == 0) return -1;
+
+  // Pass 2: pick a random cell among those tied for minimum
+  int chosen = wfc__rand32(wfc->rng) % tie_cnt;
+
+  for (int i=0; i<wfc->cell_cnt; i++) {
+    if (wfc->cells[i].tile_cnt <= 1) continue;
+    if (wfc->cells[i].entropy == min_entropy) {
+      if (chosen == 0) return i;
+      chosen--;
+    }
+  }
+
+  return -1;
 }
 
 static void wfc__init_cells(struct wfc *wfc)
@@ -1135,7 +1201,7 @@ static void wfc__init_cells(struct wfc *wfc)
 void wfc_init(struct wfc *wfc)
 {
   wfc->seed = (unsigned int) time(NULL); // 1641743677
-  srand(wfc->seed);
+  wfc__seed_rng(wfc->rng, wfc->seed);
   wfc->collapsed_cell_cnt = 0;
   memset(wfc->prop_pending, 0, wfc->cell_cnt * 4);
   wfc__init_cells(wfc);
@@ -1147,7 +1213,7 @@ void wfc_init(struct wfc *wfc)
 int wfc_run(struct wfc *wfc, int max_collapse_cnt)
 {
   //int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
-  int cell_idx = rand() % (wfc->output_height * wfc->output_width);
+  int cell_idx = wfc__rand32(wfc->rng) % (wfc->output_height * wfc->output_width);
 
   while (1) {
     print_progress(wfc->collapsed_cell_cnt);

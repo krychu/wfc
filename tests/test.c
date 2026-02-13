@@ -55,7 +55,7 @@ static unsigned char pixel_at(struct wfc_image *img, int x, int y, int c)
   return img->data[(y * img->width + x) * img->component_cnt + c];
 }
 
-#define FIXED_SEED 5
+#define FIXED_SEED 2
 
 ////////////////////////////////////////////////////////////////////////////////
 // Unit tests
@@ -342,7 +342,7 @@ static struct wfc *run_wfc_with_seed(struct wfc_image *input, unsigned int seed)
   if (!wfc) return NULL;
 
   wfc->seed = seed;
-  srand(wfc->seed);
+  wfc__seed_rng(wfc->rng, wfc->seed);
   wfc->collapsed_cell_cnt = 0;
   wfc__init_cells(wfc);
 
