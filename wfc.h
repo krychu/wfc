@@ -1056,22 +1056,27 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
   int bitset_len = wfc->bitset_len;
   unsigned *at = wfc->allowed_tiles[p->direction];
 
-  for (int t = 0; t < wfc->tile_cnt; t++) {
-    if (!wfc__bitset_get(dst_cell->tiles, t)) continue;
+  for (int word = 0; word < bitset_len; word++) {
+    unsigned bits = dst_cell->tiles[word];
+    while (bits) {
+      int bit = __builtin_ctz(bits);
+      int t = word * 32 + bit;
+      bits &= bits - 1;  // clear lowest set bit
 
-    // Is tile t enabled by any tile in the source cell?
-    unsigned total = 0;
-    unsigned *compat = &at[t * bitset_len];
-    for (int w = 0; w < bitset_len; w++)
-      total |= src_cell->tiles[w] & compat[w];
+      // Is tile t enabled by any tile in the source cell?
+      unsigned total = 0;
+      unsigned *compat = &at[t * bitset_len];
+      for (int w = 0; w < bitset_len; w++)
+        total |= src_cell->tiles[w] & compat[w];
 
-    if (!total) {
-      wfc__bitset_clear(dst_cell->tiles, t);
-      dst_cell->tile_cnt--;
-      dst_cell->entropy += wfc->tiles[t].plogp;
-      dst_cell->sum_freqs -= wfc->tiles[t].freq;
-      if (dst_cell->sum_freqs == 0)
-        return 0;
+      if (!total) {
+        wfc__bitset_clear(dst_cell->tiles, t);
+        dst_cell->tile_cnt--;
+        dst_cell->entropy += wfc->tiles[t].plogp;
+        dst_cell->sum_freqs -= wfc->tiles[t].freq;
+        if (dst_cell->sum_freqs == 0)
+          return 0;
+      }
     }
   }
 
