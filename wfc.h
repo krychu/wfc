@@ -368,6 +368,10 @@ struct wfc {
   unsigned *allowed_tiles[4];
   int bitset_len;              // Words per bitset: WFC_BITSET_LEN(tile_cnt)
 
+  int *active_cells;           // Indices of uncollapsed cells (tile_cnt > 1)
+  int *cell_to_active;         // Reverse map: cell index -> position in active_cells
+  int active_cnt;              // Number of uncollapsed cells
+
   unsigned rng[4];             // xoshiro128** state
 };
 
@@ -997,6 +1001,16 @@ static int wfc__create_allowed_tiles(unsigned *allowed_tiles[4], int tile_cnt)
   return 0;
 }
 
+static inline void wfc__deactivate_cell(struct wfc *wfc, int cell_idx)
+{
+  int pos = wfc->cell_to_active[cell_idx];
+  int last = wfc->active_cnt - 1;
+  int last_cell = wfc->active_cells[last];
+  wfc->active_cells[pos] = last_cell;
+  wfc->cell_to_active[last_cell] = pos;
+  wfc->active_cnt--;
+}
+
 static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
 {
   struct wfc__prop *p = &( wfc->props[wfc->prop_cnt] );
@@ -1085,7 +1099,10 @@ static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
   }
 
   if (old_tile_cnt != dst_cell->tile_cnt) {
-    if (dst_cell->tile_cnt == 1) wfc->collapsed_cell_cnt++;
+    if (dst_cell->tile_cnt == 1) {
+      wfc->collapsed_cell_cnt++;
+      wfc__deactivate_cell(wfc, p->dst_cell_idx);
+    }
     if (p->direction != WFC_DOWN && !wfc__is_prop_pending(wfc, p->dst_cell_idx, WFC_UP)) wfc__add_prop_up(wfc, p->dst_cell_idx);
     if (p->direction != WFC_UP && !wfc__is_prop_pending(wfc, p->dst_cell_idx, WFC_DOWN)) wfc__add_prop_down(wfc, p->dst_cell_idx);
     if (p->direction != WFC_RIGHT && !wfc__is_prop_pending(wfc, p->dst_cell_idx, WFC_LEFT)) wfc__add_prop_left(wfc, p->dst_cell_idx);
@@ -1134,6 +1151,7 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
       cell->sum_freqs = 0;
       cell->entropy = 0;
       wfc->collapsed_cell_cnt++;
+      wfc__deactivate_cell(wfc, cell_idx);
       return 1;
     }
   }
@@ -1143,13 +1161,18 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
 
 static int wfc__next_cell(struct wfc *wfc)
 {
+  int active_cnt = wfc->active_cnt;
+  if (active_cnt == 0) return -1;
+
+  int *active = wfc->active_cells;
+  struct wfc__cell *cells = wfc->cells;
+
   // Pass 1: find minimum entropy among uncollapsed cells and count ties
   double min_entropy = DBL_MAX;
   int tie_cnt = 0;
 
-  for (int i=0; i<wfc->cell_cnt; i++) {
-    if (wfc->cells[i].tile_cnt <= 1) continue;
-    double e = wfc->cells[i].entropy;
+  for (int i = 0; i < active_cnt; i++) {
+    double e = cells[active[i]].entropy;
     if (e < min_entropy) {
       min_entropy = e;
       tie_cnt = 1;
@@ -1158,15 +1181,12 @@ static int wfc__next_cell(struct wfc *wfc)
     }
   }
 
-  if (tie_cnt == 0) return -1;
-
   // Pass 2: pick a random cell among those tied for minimum
   int chosen = wfc__rand32(wfc->rng) % tie_cnt;
 
-  for (int i=0; i<wfc->cell_cnt; i++) {
-    if (wfc->cells[i].tile_cnt <= 1) continue;
-    if (wfc->cells[i].entropy == min_entropy) {
-      if (chosen == 0) return i;
+  for (int i = 0; i < active_cnt; i++) {
+    if (cells[active[i]].entropy == min_entropy) {
+      if (chosen == 0) return active[i];
       chosen--;
     }
   }
@@ -1200,7 +1220,10 @@ static void wfc__init_cells(struct wfc *wfc)
     wfc->cells[i].entropy = entropy;
     memset(wfc->cells[i].tiles, 0xFF, bitset_len * sizeof(unsigned));
     wfc->cells[i].tiles[bitset_len - 1] = last_mask;
+    wfc->active_cells[i] = i;
+    wfc->cell_to_active[i] = i;
   }
+  wfc->active_cnt = wfc->cell_cnt;
 
   wfc->prop_cnt = 0;
 }
@@ -1256,6 +1279,8 @@ void wfc_destroy(struct wfc *wfc)
   wfc__destroy_allowed_tiles(wfc->allowed_tiles);
   wfc__destroy_props(wfc->props);
   free(wfc->prop_pending);
+  free(wfc->active_cells);
+  free(wfc->cell_to_active);
   free(wfc);
 }
 
@@ -1375,6 +1400,8 @@ struct wfc *wfc_overlapping(int output_width,
   wfc->tiles = NULL;
   wfc->props = NULL;
   wfc->prop_pending = NULL;
+  wfc->active_cells = NULL;
+  wfc->cell_to_active = NULL;
   wfc->output_width = output_width;
   wfc->output_height = output_height;
   wfc->cell_cnt = output_width * output_height;
@@ -1415,6 +1442,14 @@ struct wfc *wfc_overlapping(int output_width,
 
   wfc->prop_pending = calloc(wfc->cell_cnt * 4, sizeof(unsigned char));
   if (wfc->prop_pending == NULL)
+    goto CLEANUP;
+
+  wfc->active_cells = malloc(sizeof(*wfc->active_cells) * wfc->cell_cnt);
+  if (wfc->active_cells == NULL)
+    goto CLEANUP;
+
+  wfc->cell_to_active = malloc(sizeof(*wfc->cell_to_active) * wfc->cell_cnt);
+  if (wfc->cell_to_active == NULL)
     goto CLEANUP;
 
   wfc_init(wfc);
