@@ -35,8 +35,8 @@
 //             1                // Add n*90deg rotations of all tiles
 //         );
 //
-//         wfc_run(wfc, -1);    // Run Wave Function Collapse
-//                              // -1 means no limit on iterations
+//         wfc_run(wfc, seed);  // Run Wave Function Collapse
+//                              // seed controls the random generation
 //         struct wfc_image *output_image = wfc_output_image(wfc);
 //         wfc_destroy(wfc);
 //         // use output_image->data
@@ -58,8 +58,7 @@
 //
 // wfc_run returns 0 if it cannot find a solution. You can try again like so:
 //
-//         wfc_init(wfc);
-//         wfc_run(wfc, -1);
+//         wfc_run(wfc, different_seed);
 //
 //
 // Working with image files
@@ -92,8 +91,8 @@
 //             ...
 //         );
 //
-//         wfc_run(wfc, -1);    // Run Wave Function Collapse
-//                              // -1 means no restriction on number of iterations
+//         wfc_run(wfc, seed);  // Run Wave Function Collapse
+//                              // seed controls the random generation
 //         wfc_export(wfc, "output.png");
 //         wfc_img_destroy(input_image);
 //         wfc_destroy(wfc);
@@ -142,8 +141,7 @@ struct wfc *wfc_overlapping(int output_width,              // Output width in pi
                             int yflip_tiles,               // Add yflips of all tiles
                             int rotate_tiles);             // Add n*90deg rotations of all tiles
 
-void wfc_init(struct wfc *wfc); // Resets wfc generation, wfc_run can be called again
-int wfc_run(struct wfc *wfc, int max_collapse_cnt);
+int wfc_run(struct wfc *wfc, unsigned int seed);
 int wfc_export(struct wfc *wfc, const char *filename);
 void wfc_destroy(struct wfc *wfc);
 
@@ -1228,22 +1226,20 @@ static void wfc__init_cells(struct wfc *wfc)
   wfc->prop_cnt = 0;
 }
 
-// Allows to call wfc_run again
-void wfc_init(struct wfc *wfc)
+static void wfc__reset(struct wfc *wfc, unsigned int seed)
 {
-  wfc->seed = (unsigned int) time(NULL); // 1641743677
-  wfc__seed_rng(wfc->rng, wfc->seed);
+  wfc->seed = seed;
+  wfc__seed_rng(wfc->rng, seed);
   wfc->collapsed_cell_cnt = 0;
   memset(wfc->prop_pending, 0, wfc->cell_cnt * 4);
   wfc__init_cells(wfc);
 }
 
-// max_collapse_cnt of -1 means no iteration number limit
-//
 // Return 0 on error (contradiction occurred)
-int wfc_run(struct wfc *wfc, int max_collapse_cnt)
+int wfc_run(struct wfc *wfc, unsigned int seed)
 {
-  //int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
+  wfc__reset(wfc, seed);
+
   int cell_idx = wfc__rand32(wfc->rng) % (wfc->output_height * wfc->output_width);
 
   while (1) {
@@ -1261,7 +1257,7 @@ int wfc_run(struct wfc *wfc, int max_collapse_cnt)
 
     cell_idx = wfc__next_cell(wfc);
 
-    if (cell_idx == -1 || wfc->collapsed_cell_cnt == max_collapse_cnt) {
+    if (cell_idx == -1) {
       break;
     }
   }
@@ -1451,8 +1447,6 @@ struct wfc *wfc_overlapping(int output_width,
   wfc->cell_to_active = malloc(sizeof(*wfc->cell_to_active) * wfc->cell_cnt);
   if (wfc->cell_to_active == NULL)
     goto CLEANUP;
-
-  wfc_init(wfc);
 
   return wfc;
 

@@ -50,8 +50,8 @@ Usage:
             1                // Add n*90deg rotations of all tiles
         );
 
-        wfc_run(wfc, -1);    // Run Wave Function Collapse
-                             // -1 means no limit on iterations
+        wfc_run(wfc, seed);  // Run Wave Function Collapse
+                             // seed controls the random generation
         struct wfc_image *output_image = wfc_output_image(wfc);
         wfc_destroy(wfc);
         // use output_image->data
@@ -77,8 +77,7 @@ image.
 `wfc_run` returns 0 if it cannot find a solution. You can try again like so:
 
 ```c
-        wfc_init(wfc);
-        wfc_run(wfc, -1);
+        wfc_run(wfc, different_seed);
 ```
 
 ### Working with image files
@@ -115,8 +114,8 @@ Usage:
             ...
         );
 
-        wfc_run(wfc, -1);    // Run Wave Function Collapse
-                             // -1 means no restriction on number of iterations
+        wfc_run(wfc, seed);  // Run Wave Function Collapse
+                             // seed controls the random generation
         wfc_export(wfc, "output.png");
         wfc_img_destroy(input_image);
         wfc_destroy(wfc);

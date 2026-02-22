@@ -88,14 +88,9 @@ int main(void)
         continue;
       }
 
-      wfc->seed = FIXED_SEED;
-      wfc__seed_rng(wfc->rng, wfc->seed);
-      wfc->collapsed_cell_cnt = 0;
-      wfc__init_cells(wfc);
-
       clock_gettime(CLOCK_MONOTONIC, &t1);
 
-      wfc_run(wfc, -1);
+      wfc_run(wfc, FIXED_SEED);
 
       clock_gettime(CLOCK_MONOTONIC, &t2);
 
