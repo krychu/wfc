@@ -222,6 +222,9 @@ int main(int argc, const char **argv)
     return EXIT_FAILURE;
   }
 
+  struct timespec t0, t1, t2;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+
   struct wfc *wfc = wfc_overlapping(output_width,
                                     output_height,
                                     image,
@@ -237,6 +240,8 @@ int main(int argc, const char **argv)
     goto CLEANUP;
   }
 
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+
   /* wfc_export_tiles(wfc, "tmp"); */
   print_summary(wfc, input_filename, output_filename, seed);
 
@@ -244,6 +249,15 @@ int main(int argc, const char **argv)
     p("Contradiction occurred, try again\n");
     goto CLEANUP;
   }
+
+  clock_gettime(CLOCK_MONOTONIC, &t2);
+
+  double setup_ms = (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) / 1e6;
+  double solve_ms = (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_nsec - t1.tv_nsec) / 1e6;
+  printf("setup:                %.1f ms\n", setup_ms);
+  printf("solve:                %.1f ms\n", solve_ms);
+  printf("total:                %.1f ms\n", setup_ms + solve_ms);
+  printf("\n");
 
   if (!wfc_export(wfc, output_filename)) {
     p("Error: cannot save image: %s\n", output_filename);
