@@ -14,7 +14,16 @@ input/output pairs:
 
 The WFC is often used for procedural map generation, but is not limited to this use-case.
 
-The library is very performant and includes a number of optimizations not found in other implementations. As an example, the generation of the above 128x128 images (from 3x3 patterns, flipped, and rotated), on a MacBook Air M1 (2020) took: 1.35, 0.92, 0.31, 7.7, 1.74, and 0.67 seconds respectively. This includes the image loading/saving time.
+The library is very performant and includes a number of optimizations not found in other implementations. As an example, generating a 128x128 image from cave.png (308 unique tiles) takes 371ms. Solve times (3x3 patterns, flipped and rotated) on an Intel Core Ultra 9 285K with clang -O3:
+
+| Sample | Tiles | Size | Solve (ms) |
+|---|---|---|---|
+| cave.png | 308 | 128x128 | 371 |
+| cave.png | 308 | 256x256 | 1729 |
+| twolines2.png | 76 | 128x128 | 58 |
+| twolines2.png | 76 | 256x256 | 514 |
+| wrinkles.png | 51 | 128x128 | 37 |
+| wrinkles.png | 51 | 256x256 | 356 |
 
 ## LANGUAGE BINDINGS
 
@@ -156,6 +165,8 @@ Basic usage:
 
 Thanks for using wfc. If you find any bugs, have questions, or feedback please
 let me know. Also, if you'd like to share your works it's very appreciated.
+
+Some optimization approaches were informed by Vladimir Pleskonjic's [libwfc](https://github.com/vplesko/libwfc) and his [devlog](https://vplesko.com/posts/wfc/devlog_4.html).
 
 samp.krystian at gmail.com
 
