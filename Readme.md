@@ -3,9 +3,9 @@
 Single-file Wave Function Collapse library in C, plus a command-line tool
 
 - License: MIT
-- Version: 0.7
+- Version: 1.0
 
-This is an early version that supports the overlapping WFC method.
+Supports the overlapping WFC method.
 The method takes a small input image and generates a larger output image which is
 locally similar to the input image. A few examples of
 input/output pairs:
@@ -14,7 +14,16 @@ input/output pairs:
 
 The WFC is often used for procedural map generation, but is not limited to this use-case.
 
-The library is very performant and includes a number of optimizations not found in other implementations. As an example, the generation of the above 128x128 images (from 3x3 patterns, flipped, and rotated), on a MacBook Air M1 (2020) took: 1.35, 0.92, 0.31, 7.7, 1.74, and 0.67 seconds respectively. This includes the image loading/saving time.
+The library is very performant and includes a number of optimizations not found in other implementations. As an example, generating a 128x128 image from cave.png (308 unique tiles) takes 371ms. Solve times (3x3 patterns, flipped and rotated) on an Intel Core Ultra 9 285K with clang -O3:
+
+| Sample | Tiles | Size | Solve (ms) |
+|---|---|---|---|
+| cave.png | 308 | 128x128 | 371 |
+| cave.png | 308 | 256x256 | 1729 |
+| twolines2.png | 76 | 128x128 | 58 |
+| twolines2.png | 76 | 256x256 | 514 |
+| wrinkles.png | 51 | 128x128 | 37 |
+| wrinkles.png | 51 | 256x256 | 356 |
 
 ## LANGUAGE BINDINGS
 
@@ -50,8 +59,8 @@ Usage:
             1                // Add n*90deg rotations of all tiles
         );
 
-        wfc_run(wfc, -1);    // Run Wave Function Collapse
-                             // -1 means no limit on iterations
+        wfc_run(wfc, seed);  // Run Wave Function Collapse
+                             // seed controls the random generation
         struct wfc_image *output_image = wfc_output_image(wfc);
         wfc_destroy(wfc);
         // use output_image->data
@@ -77,8 +86,7 @@ image.
 `wfc_run` returns 0 if it cannot find a solution. You can try again like so:
 
 ```c
-        wfc_init(wfc);
-        wfc_run(wfc, -1);
+        wfc_run(wfc, different_seed);
 ```
 
 ### Working with image files
@@ -115,8 +123,8 @@ Usage:
             ...
         );
 
-        wfc_run(wfc, -1);    // Run Wave Function Collapse
-                             // -1 means no restriction on number of iterations
+        wfc_run(wfc, seed);  // Run Wave Function Collapse
+                             // seed controls the random generation
         wfc_export(wfc, "output.png");
         wfc_img_destroy(input_image);
         wfc_destroy(wfc);

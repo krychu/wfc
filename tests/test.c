@@ -55,7 +55,7 @@ static unsigned char pixel_at(struct wfc_image *img, int x, int y, int c)
   return img->data[(y * img->width + x) * img->component_cnt + c];
 }
 
-#define FIXED_SEED 5
+#define FIXED_SEED 2
 
 ////////////////////////////////////////////////////////////////////////////////
 // Unit tests
@@ -341,12 +341,7 @@ static struct wfc *run_wfc_with_seed(struct wfc_image *input, unsigned int seed)
   );
   if (!wfc) return NULL;
 
-  wfc->seed = seed;
-  srand(wfc->seed);
-  wfc->collapsed_cell_cnt = 0;
-  wfc__init_cells(wfc);
-
-  if (!wfc_run(wfc, -1)) {
+  if (!wfc_run(wfc, seed)) {
     wfc_destroy(wfc);
     return NULL;
   }
@@ -379,6 +374,44 @@ static int test_deterministic(void)
   wfc_img_destroy(out2);
   wfc_destroy(wfc1);
   wfc_destroy(wfc2);
+  wfc_img_destroy(input);
+  return 1;
+}
+
+static int test_rerun(void)
+{
+  struct wfc_image *input = wfc_img_load("tests/fixtures/cave.png");
+  ASSERT(input != NULL, "failed to load cave.png");
+
+  struct wfc *wfc = wfc_overlapping(64, 64, input, 3, 3, 1, 1, 1, 1);
+  ASSERT(wfc != NULL, "wfc_overlapping failed");
+
+  // First run
+  ASSERT(wfc_run(wfc, FIXED_SEED), "first run failed (contradiction)");
+  struct wfc_image *out1 = wfc_output_image(wfc);
+  ASSERT(out1 != NULL, "output_image 1 failed");
+
+  // Second run with same seed on same wfc instance
+  ASSERT(wfc_run(wfc, FIXED_SEED), "second run failed (contradiction)");
+  struct wfc_image *out2 = wfc_output_image(wfc);
+  ASSERT(out2 != NULL, "output_image 2 failed");
+
+  int size = out1->width * out1->height * out1->component_cnt;
+  ASSERT(memcmp(out1->data, out2->data, size) == 0,
+         "re-running with same seed should produce identical output");
+
+  // Third run with different seed should produce different output
+  ASSERT(wfc_run(wfc, FIXED_SEED + 1), "third run failed (contradiction)");
+  struct wfc_image *out3 = wfc_output_image(wfc);
+  ASSERT(out3 != NULL, "output_image 3 failed");
+
+  ASSERT(memcmp(out1->data, out3->data, size) != 0,
+         "different seed should produce different output");
+
+  wfc_img_destroy(out1);
+  wfc_img_destroy(out2);
+  wfc_img_destroy(out3);
+  wfc_destroy(wfc);
   wfc_img_destroy(input);
   return 1;
 }
@@ -498,6 +531,7 @@ int main(int argc, char **argv)
       wfc_img_destroy(probe);
       printf("Integration tests:\n");
       RUN_TEST(test_deterministic);
+      RUN_TEST(test_rerun);
       RUN_TEST(test_regression);
       printf("\n");
     } else {

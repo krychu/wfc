@@ -4,9 +4,9 @@
 //
 // Author:  Krystian Samp (samp.krystian at gmail.com)
 // License: MIT
-// Version: 0.7
+// Version: 1.0
 //
-// This is an early version that supports the overlapping WFC method.
+// Supports the overlapping WFC method.
 // All feedback is very welcome and best sent by email. Thanks.
 //
 //
@@ -35,8 +35,8 @@
 //             1                // Add n*90deg rotations of all tiles
 //         );
 //
-//         wfc_run(wfc, -1);    // Run Wave Function Collapse
-//                              // -1 means no limit on iterations
+//         wfc_run(wfc, seed);  // Run Wave Function Collapse
+//                              // seed controls the random generation
 //         struct wfc_image *output_image = wfc_output_image(wfc);
 //         wfc_destroy(wfc);
 //         // use output_image->data
@@ -58,8 +58,7 @@
 //
 // wfc_run returns 0 if it cannot find a solution. You can try again like so:
 //
-//         wfc_init(wfc);
-//         wfc_run(wfc, -1);
+//         wfc_run(wfc, different_seed);
 //
 //
 // Working with image files
@@ -92,8 +91,8 @@
 //             ...
 //         );
 //
-//         wfc_run(wfc, -1);    // Run Wave Function Collapse
-//                              // -1 means no restriction on number of iterations
+//         wfc_run(wfc, seed);  // Run Wave Function Collapse
+//                              // seed controls the random generation
 //         wfc_export(wfc, "output.png");
 //         wfc_img_destroy(input_image);
 //         wfc_destroy(wfc);
@@ -142,8 +141,7 @@ struct wfc *wfc_overlapping(int output_width,              // Output width in pi
                             int yflip_tiles,               // Add yflips of all tiles
                             int rotate_tiles);             // Add n*90deg rotations of all tiles
 
-void wfc_init(struct wfc *wfc); // Resets wfc generation, wfc_run can be called again
-int wfc_run(struct wfc *wfc, int max_collapse_cnt);
+int wfc_run(struct wfc *wfc, unsigned int seed);
 int wfc_export(struct wfc *wfc, const char *filename);
 void wfc_destroy(struct wfc *wfc);
 
@@ -206,6 +204,96 @@ enum wfc__direction {WFC_UP,WFC_DOWN,WFC_LEFT,WFC_RIGHT};
 static int directions[4] = {WFC_UP, WFC_DOWN, WFC_LEFT, WFC_RIGHT};
 enum wfc__method {WFC_METHOD_OVERLAPPING, WFC_METHOD_TILED};
 
+// Number of unsigned words needed to pack tile_cnt bits
+#define WFC_BITSET_LEN(tile_cnt) (((tile_cnt) + 31) / 32)
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// PRNG: xoshiro128** (Blackman & Vigna, public domain)
+//
+////////////////////////////////////////////////////////////////////////////////
+
+static inline unsigned wfc__rotl32(unsigned x, int k)
+{
+  return (x << k) | (x >> (32 - k));
+}
+
+// xoshiro128**: 32-bit output, 128-bit state, period 2^128-1
+static inline unsigned wfc__rand32(unsigned s[4])
+{
+  unsigned result = wfc__rotl32(s[1] * 5, 7) * 9;
+  unsigned t = s[1] << 9;
+
+  s[2] ^= s[0];
+  s[3] ^= s[1];
+  s[1] ^= s[2];
+  s[0] ^= s[3];
+
+  s[2] ^= t;
+  s[3] = wfc__rotl32(s[3], 11);
+
+  return result;
+}
+
+// splitmix64: used to seed xoshiro128** from a single 64-bit value
+static inline unsigned long long wfc__splitmix64(unsigned long long *state)
+{
+  unsigned long long z = (*state += 0x9e3779b97f4a7c15ULL);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+  return z ^ (z >> 31);
+}
+
+static inline void wfc__seed_rng(unsigned s[4], unsigned long long seed)
+{
+  unsigned long long sm = seed;
+  unsigned long long z0 = wfc__splitmix64(&sm);
+  unsigned long long z1 = wfc__splitmix64(&sm);
+  s[0] = (unsigned)(z0);
+  s[1] = (unsigned)(z0 >> 32);
+  s[2] = (unsigned)(z1);
+  s[3] = (unsigned)(z1 >> 32);
+}
+
+static inline int wfc__bitset_get(const unsigned *bs, int idx)
+{
+  return (bs[idx / 32] >> (idx % 32)) & 1;
+}
+
+static inline void wfc__bitset_set(unsigned *bs, int idx)
+{
+  bs[idx / 32] |= 1u << (idx % 32);
+}
+
+static inline void wfc__bitset_clear(unsigned *bs, int idx)
+{
+  bs[idx / 32] &= ~(1u << (idx % 32));
+}
+
+static inline int wfc__bitset_popcount(const unsigned *bs, int len)
+{
+  int cnt = 0;
+  for (int i = 0; i < len; i++)
+    cnt += __builtin_popcount(bs[i]);
+  return cnt;
+}
+
+// Returns next set bit index >= start, or -1 if none
+static inline int wfc__bitset_next(const unsigned *bs, int len, int start)
+{
+  int word = start / 32;
+  if (word >= len) return -1;
+
+  // Mask off bits below start within the first word
+  unsigned w = bs[word] & (~0u << (start % 32));
+  while (1) {
+    if (w) return word * 32 + __builtin_ctz(w);
+    word++;
+    if (word >= len) return -1;
+    w = bs[word];
+  }
+}
+
 // Rules are stored in tiles
 struct wfc__tile {
   struct wfc_image *image;
@@ -214,10 +302,13 @@ struct wfc__tile {
                                // count of tile occurrences in the input image.
                                // It affects the probability of the tile being
                                // selected when collapsing a cell.
+
+  double plogp;                // Precomputed (freq/sum_freqs)*log(freq/sum_freqs)
+                               // for incremental entropy updates.
 };
 
 struct wfc__cell {
-  int *tiles;                  // Possible tiles in the cell (initially all)
+  unsigned *tiles;             // Possible tiles in the cell (bitset, initially all)
   int tile_cnt;
 
   int sum_freqs;               // Sum of tile frequencies used to calculate
@@ -263,19 +354,23 @@ struct wfc {
 
   struct wfc__prop *props;     // Propagation updates
   int prop_cnt;
-  int prop_idx;                // Current index into props, used to scan
-                               // props forward to check whether a
-                               // a candidate prop is already there
+  unsigned char *prop_pending; // prop_pending[cell * 4 + dir]: 1 if a prop
+                               // with that (src_cell, direction) is queued
   int collapsed_cell_cnt;
 
-  // These are the rules. A matrix lookup of allowed tile pairs in each
-  // direction. allowed_tiles[d][src_idx*tile_cnt + dst_idx] is 1 or 0
-  // depending on whether dst_idx tile can be placed next to the src_idx
-  // tile in the direction d.
+  // Rules. allowed_tiles[d][dst * bitset_len .. +bitset_len] is a bitset
+  // of source tiles that allow dst tile in direction d.
   //
   // In the overlapping method tiles are allowed next to each other if
   // their content overlaps, excluding the edges.
-  int *allowed_tiles[4];
+  unsigned *allowed_tiles[4];
+  int bitset_len;              // Words per bitset: WFC_BITSET_LEN(tile_cnt)
+
+  int *active_cells;           // Indices of uncollapsed cells (tile_cnt > 1)
+  int *cell_to_active;         // Reverse map: cell index -> position in active_cells
+  int active_cnt;              // Number of uncollapsed cells
+
+  unsigned rng[4];             // xoshiro128** state
 };
 
 #ifdef WFC_DEBUG
@@ -592,7 +687,7 @@ static int *wfc_cells(struct wfc *wfc)
     return NULL;
 
   for (int i=0; i<wfc->cell_cnt; i++)
-    cells[i] = wfc->cells[i].tiles[0];
+    cells[i] = wfc__bitset_next(wfc->cells[i].tiles, wfc->bitset_len, 0);
 
   return cells;
 }
@@ -610,8 +705,9 @@ struct wfc_image *wfc_output_image(struct wfc *wfc)
       struct wfc__cell *cell = &( wfc->cells[y * wfc->output_width + x] );
 
       double components[4] = {0, 0, 0, 0};
-      for (int i=0; i<cell->tile_cnt; i++) {
-        struct wfc__tile *tile = &( wfc->tiles[ cell->tiles[i] ] );
+      int bit = -1;
+      while ((bit = wfc__bitset_next(cell->tiles, wfc->bitset_len, bit + 1)) >= 0) {
+        struct wfc__tile *tile = &( wfc->tiles[bit] );
         for (int j=0; j<wfc->image->component_cnt; j++) {
           components[j] += tile->image->data[j];
         }
@@ -822,6 +918,8 @@ static void wfc__destroy_cells(struct wfc__cell *cells, int cell_cnt)
 // Return NULL on error
 static struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
 {
+  int bitset_len = WFC_BITSET_LEN(tile_cnt);
+
   struct wfc__cell *cells = malloc(sizeof(*cells) * cell_cnt);
   if (cells == NULL)
     goto CLEANUP;
@@ -829,11 +927,11 @@ static struct wfc__cell *wfc__create_cells(int cell_cnt, int tile_cnt)
   for (int i=0; i<cell_cnt; i++)
     cells[i].tiles = NULL;
 
-  cells[0].tiles = malloc(sizeof(*(cells[0].tiles)) * tile_cnt * cell_cnt);
+  cells[0].tiles = malloc(sizeof(*(cells[0].tiles)) * bitset_len * cell_cnt);
   if (cells[0].tiles == NULL)
     goto CLEANUP;
   for (int i=1; i<cell_cnt; i++)
-    cells[i].tiles = cells[0].tiles + i * tile_cnt;
+    cells[i].tiles = cells[0].tiles + i * bitset_len;
 
   return cells;
 
@@ -877,19 +975,20 @@ static struct wfc__tile *wfc__create_tiles(int tile_cnt)
   return NULL;
 }
 
-static void wfc__destroy_allowed_tiles(int *allowed_tiles[4])
+static void wfc__destroy_allowed_tiles(unsigned *allowed_tiles[4])
 {
   free(allowed_tiles[0]);
 }
 
 // Return 0 on error
-static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
+static int wfc__create_allowed_tiles(unsigned *allowed_tiles[4], int tile_cnt)
 {
-  allowed_tiles[0] = malloc(sizeof(*allowed_tiles[0]) * tile_cnt * tile_cnt * 4);
+  int bitset_len = WFC_BITSET_LEN(tile_cnt);
+  allowed_tiles[0] = calloc(4 * tile_cnt * bitset_len, sizeof(*allowed_tiles[0]));
   if (allowed_tiles[0] == NULL)
     goto CLEANUP;
   for (int i=1; i<4; i++)
-    allowed_tiles[i] = allowed_tiles[0] + i * tile_cnt * tile_cnt;
+    allowed_tiles[i] = allowed_tiles[0] + i * tile_cnt * bitset_len;
 
   return 1;
 
@@ -900,6 +999,16 @@ static int wfc__create_allowed_tiles(int *allowed_tiles[4], int tile_cnt)
   return 0;
 }
 
+static inline void wfc__deactivate_cell(struct wfc *wfc, int cell_idx)
+{
+  int pos = wfc->cell_to_active[cell_idx];
+  int last = wfc->active_cnt - 1;
+  int last_cell = wfc->active_cells[last];
+  wfc->active_cells[pos] = last_cell;
+  wfc->cell_to_active[last_cell] = pos;
+  wfc->active_cnt--;
+}
+
 static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, enum wfc__direction direction)
 {
   struct wfc__prop *p = &( wfc->props[wfc->prop_cnt] );
@@ -907,6 +1016,7 @@ static void wfc__add_prop(struct wfc *wfc, int src_cell_idx, int dst_cell_idx, e
   p->src_cell_idx = src_cell_idx;
   p->dst_cell_idx = dst_cell_idx;
   p->direction = direction;
+  wfc->prop_pending[src_cell_idx * 4 + direction] = 1;
 }
 
 // add prop to update cell above the cell_idx
@@ -938,36 +1048,12 @@ static void wfc__add_prop_right(struct wfc *wfc, int src_cell_idx)
   }
 }
 
-// Does the cell enable tile in the direction?
-static int wfc__tile_enabled(struct wfc *wfc, int tile_idx, int cell_idx, enum wfc__direction d)
-{
-  struct wfc__cell *cell = &( wfc->cells[cell_idx] );
-  int *tiles = cell->tiles;
-
-  // Tile is enabled if any of the cell's tiles allowes it in
-  // the specified diretion
-  int tile_cnt = wfc->tile_cnt;
-  for (int i=0, cnt=cell->tile_cnt; i<cnt; i++) {
-    if (wfc->allowed_tiles[d][tiles[i] * tile_cnt + tile_idx]) {
-      return 1;
-    }
-  }
-
-  return 0;
-}
-
 // Checks whether particular prop is already added and pending, in which
 // case there is no point of adding the same prop again.
 //
 // 1 - prop is added, 0 - prop is not added
 static int wfc__is_prop_pending(struct wfc *wfc, int cell_idx, enum wfc__direction d) {
-  for (int i=wfc->prop_idx+1; i<wfc->prop_cnt; i++) {
-    struct wfc__prop *p = &( wfc->props[i] );
-    if (p->src_cell_idx == cell_idx && p->direction == d) {
-      return 1;
-    }
-  }
-  return 0;
+  return wfc->prop_pending[cell_idx * 4 + d];
 }
 
 // Updates tiles in the destination cell to those that are allowed by the source cell
@@ -976,41 +1062,50 @@ static int wfc__is_prop_pending(struct wfc *wfc, int cell_idx, enum wfc__directi
 // Return 0 on error
 static int wfc__propagate_prop(struct wfc *wfc, struct wfc__prop *p)
 {
-  int new_cnt = 0;
-
   struct wfc__cell *dst_cell = &( wfc->cells[ p->dst_cell_idx ] );
+  struct wfc__cell *src_cell = &( wfc->cells[ p->src_cell_idx ] );
+  int old_tile_cnt = dst_cell->tile_cnt;
+  int bitset_len = wfc->bitset_len;
+  unsigned *at = wfc->allowed_tiles[p->direction];
 
-  // Go through all destination tiles and check whether they are enabled by the source cell
-  for (int i=0, cnt=dst_cell->tile_cnt; i<cnt; i++) {
-    int possible_dst_tile_idx = dst_cell->tiles[i];
+  for (int word = 0; word < bitset_len; word++) {
+    unsigned bits = dst_cell->tiles[word];
+    while (bits) {
+      int bit = __builtin_ctz(bits);
+      int t = word * 32 + bit;
+      bits &= bits - 1;  // clear lowest set bit
 
-    // If a destination tile is enabled by the source cell, keep it
-    if (wfc__tile_enabled(wfc, possible_dst_tile_idx, p->src_cell_idx, p->direction)) {
-      dst_cell->tiles[new_cnt] = possible_dst_tile_idx;
-      new_cnt++;
-    } else {
-      int freq = wfc->tiles[possible_dst_tile_idx].freq;
-      double p = ((double)freq) / wfc->sum_freqs;
-      dst_cell->entropy += p*log(p);
-      dst_cell->sum_freqs -= freq;
-      if (dst_cell->sum_freqs == 0) // no options left TODO: remove
-        return 0;
+      // Is tile t enabled by any tile in the source cell?
+      unsigned total = 0;
+      unsigned *compat = &at[t * bitset_len];
+      for (int w = 0; w < bitset_len; w++)
+        total |= src_cell->tiles[w] & compat[w];
+
+      if (!total) {
+        wfc__bitset_clear(dst_cell->tiles, t);
+        dst_cell->tile_cnt--;
+        dst_cell->entropy += wfc->tiles[t].plogp;
+        dst_cell->sum_freqs -= wfc->tiles[t].freq;
+        if (dst_cell->sum_freqs == 0)
+          return 0;
+      }
     }
   }
 
-  if (!new_cnt) {
+  if (dst_cell->tile_cnt == 0) {
     return 0;
   }
 
-  if (dst_cell->tile_cnt != new_cnt) {
-    if (new_cnt == 1) wfc->collapsed_cell_cnt++;
+  if (old_tile_cnt != dst_cell->tile_cnt) {
+    if (dst_cell->tile_cnt == 1) {
+      wfc->collapsed_cell_cnt++;
+      wfc__deactivate_cell(wfc, p->dst_cell_idx);
+    }
     if (p->direction != WFC_DOWN && !wfc__is_prop_pending(wfc, p->dst_cell_idx, WFC_UP)) wfc__add_prop_up(wfc, p->dst_cell_idx);
     if (p->direction != WFC_UP && !wfc__is_prop_pending(wfc, p->dst_cell_idx, WFC_DOWN)) wfc__add_prop_down(wfc, p->dst_cell_idx);
     if (p->direction != WFC_RIGHT && !wfc__is_prop_pending(wfc, p->dst_cell_idx, WFC_LEFT)) wfc__add_prop_left(wfc, p->dst_cell_idx);
     if (p->direction != WFC_LEFT && !wfc__is_prop_pending(wfc, p->dst_cell_idx, WFC_RIGHT)) wfc__add_prop_right(wfc, p->dst_cell_idx);
   }
-
-  dst_cell->tile_cnt = new_cnt;
 
   return 1;
 }
@@ -1026,8 +1121,8 @@ static int wfc__propagate(struct wfc *wfc, int cell_idx)
   wfc__add_prop_right(wfc, cell_idx);
 
   for (int i=0; i<wfc->prop_cnt; i++) {
-    wfc->prop_idx = i;
     struct wfc__prop *p = &( wfc->props[i] );
+    wfc->prop_pending[p->src_cell_idx * 4 + p->direction] = 0;
     if (!wfc__propagate_prop(wfc, p)) {
       return 0;
     }
@@ -1039,17 +1134,22 @@ static int wfc__propagate(struct wfc *wfc, int cell_idx)
 // Return 0 on error (contradiction)
 static int wfc__collapse(struct wfc *wfc, int cell_idx)
 {
-  int remaining = rand() % wfc->cells[cell_idx].sum_freqs;
-  for (int i=0; i<wfc->cells[cell_idx].tile_cnt; i++) {
-    int freq = wfc->tiles[ wfc->cells[cell_idx].tiles[i] ].freq;
+  struct wfc__cell *cell = &wfc->cells[cell_idx];
+  int bitset_len = wfc->bitset_len;
+  int remaining = wfc__rand32(wfc->rng) % cell->sum_freqs;
+  int bit = -1;
+  while ((bit = wfc__bitset_next(cell->tiles, bitset_len, bit + 1)) >= 0) {
+    int freq = wfc->tiles[bit].freq;
     if (remaining >= freq) {
       remaining -= freq;
     } else {
-      wfc->cells[cell_idx].tiles[0] = wfc->cells[cell_idx].tiles[i];
-      wfc->cells[cell_idx].tile_cnt = 1;
-      wfc->cells[cell_idx].sum_freqs = 0;
-      wfc->cells[cell_idx].entropy = 0;
+      memset(cell->tiles, 0, bitset_len * sizeof(unsigned));
+      wfc__bitset_set(cell->tiles, bit);
+      cell->tile_cnt = 1;
+      cell->sum_freqs = 0;
+      cell->entropy = 0;
       wfc->collapsed_cell_cnt++;
+      wfc__deactivate_cell(wfc, cell_idx);
       return 1;
     }
   }
@@ -1059,19 +1159,37 @@ static int wfc__collapse(struct wfc *wfc, int cell_idx)
 
 static int wfc__next_cell(struct wfc *wfc)
 {
-  int min_idx = -1;
-  double min_entropy = DBL_MAX;
+  int active_cnt = wfc->active_cnt;
+  if (active_cnt == 0) return -1;
 
-  for (int i=0; i<wfc->cell_cnt; i++) {
-    // Add small noise to break ties between tiles with the same entropy
-    double entropy = wfc->cells[i].entropy + rand() / (100000.0 * RAND_MAX);
-    if (wfc->cells[i].tile_cnt != 1 && entropy < min_entropy) {
-      min_entropy = entropy;
-      min_idx = i;
+  int *active = wfc->active_cells;
+  struct wfc__cell *cells = wfc->cells;
+
+  // Pass 1: find minimum entropy among uncollapsed cells and count ties
+  double min_entropy = DBL_MAX;
+  int tie_cnt = 0;
+
+  for (int i = 0; i < active_cnt; i++) {
+    double e = cells[active[i]].entropy;
+    if (e < min_entropy) {
+      min_entropy = e;
+      tie_cnt = 1;
+    } else if (e == min_entropy) {
+      tie_cnt++;
     }
   }
 
-  return min_idx;
+  // Pass 2: pick a random cell among those tied for minimum
+  int chosen = wfc__rand32(wfc->rng) % tie_cnt;
+
+  for (int i = 0; i < active_cnt; i++) {
+    if (cells[active[i]].entropy == min_entropy) {
+      if (chosen == 0) return active[i];
+      chosen--;
+    }
+  }
+
+  return -1;
 }
 
 static void wfc__init_cells(struct wfc *wfc)
@@ -1084,38 +1202,45 @@ static void wfc__init_cells(struct wfc *wfc)
   double sum_plogp = 0.0;
   for (int i=0; i<wfc->tile_cnt; i++) {
     double p = ((double)wfc->tiles[i].freq) / sum_freqs;
-    sum_plogp += p*log(p);
+    double plogp = p * log(p);
+    wfc->tiles[i].plogp = plogp;
+    sum_plogp += plogp;
   }
   double entropy = -sum_plogp;
+
+  int bitset_len = wfc->bitset_len;
+  // Last word mask to avoid phantom bits
+  unsigned last_mask = (wfc->tile_cnt % 32) ? ((1u << (wfc->tile_cnt % 32)) - 1) : ~0u;
 
   for (int i=0; i<wfc->cell_cnt; i++) {
     wfc->cells[i].tile_cnt = wfc->tile_cnt;
     wfc->cells[i].sum_freqs = sum_freqs;
     wfc->cells[i].entropy = entropy;
-    for (int j=0; j<wfc->tile_cnt; j++) {
-      wfc->cells[i].tiles[j] = j;
-    }
+    memset(wfc->cells[i].tiles, 0xFF, bitset_len * sizeof(unsigned));
+    wfc->cells[i].tiles[bitset_len - 1] = last_mask;
+    wfc->active_cells[i] = i;
+    wfc->cell_to_active[i] = i;
   }
+  wfc->active_cnt = wfc->cell_cnt;
 
   wfc->prop_cnt = 0;
 }
 
-// Allows to call wfc_run again
-void wfc_init(struct wfc *wfc)
+static void wfc__reset(struct wfc *wfc, unsigned int seed)
 {
-  wfc->seed = (unsigned int) time(NULL); // 1641743677
-  srand(wfc->seed);
+  wfc->seed = seed;
+  wfc__seed_rng(wfc->rng, seed);
   wfc->collapsed_cell_cnt = 0;
+  memset(wfc->prop_pending, 0, wfc->cell_cnt * 4);
   wfc__init_cells(wfc);
 }
 
-// max_collapse_cnt of -1 means no iteration number limit
-//
 // Return 0 on error (contradiction occurred)
-int wfc_run(struct wfc *wfc, int max_collapse_cnt)
+int wfc_run(struct wfc *wfc, unsigned int seed)
 {
-  //int cell_idx = (wfc->output_height / 2) * wfc->output_width + wfc->output_width / 2;
-  int cell_idx = rand() % (wfc->output_height * wfc->output_width);
+  wfc__reset(wfc, seed);
+
+  int cell_idx = wfc__rand32(wfc->rng) % (wfc->output_height * wfc->output_width);
 
   while (1) {
     print_progress(wfc->collapsed_cell_cnt);
@@ -1132,7 +1257,7 @@ int wfc_run(struct wfc *wfc, int max_collapse_cnt)
 
     cell_idx = wfc__next_cell(wfc);
 
-    if (cell_idx == -1 || wfc->collapsed_cell_cnt == max_collapse_cnt) {
+    if (cell_idx == -1) {
       break;
     }
   }
@@ -1149,6 +1274,9 @@ void wfc_destroy(struct wfc *wfc)
   wfc__destroy_tiles(wfc->tiles, wfc->tile_cnt);
   wfc__destroy_allowed_tiles(wfc->allowed_tiles);
   wfc__destroy_props(wfc->props);
+  free(wfc->prop_pending);
+  free(wfc->active_cells);
+  free(wfc->cell_to_active);
   free(wfc);
 }
 
@@ -1158,14 +1286,16 @@ void wfc_destroy(struct wfc *wfc)
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-static void wfc__compute_allowed_tiles(int *allowed_tiles[4], struct wfc__tile *tiles, int tile_cnt)
+static void wfc__compute_allowed_tiles(unsigned *allowed_tiles[4], struct wfc__tile *tiles, int tile_cnt)
 {
+  int bitset_len = WFC_BITSET_LEN(tile_cnt);
   for (int d=0; d<4; d++) {
-    for (int i=0; i<tile_cnt; i++) {
-      for (int j=0; j<tile_cnt; j++) {
-        //if (i==j)
-        //  continue;
-        allowed_tiles[d][i*tile_cnt + j] = wfc__img_cmpoverlap(tiles[i].image, tiles[j].image, d);
+    for (int src=0; src<tile_cnt; src++) {
+      for (int dst=0; dst<tile_cnt; dst++) {
+        if (wfc__img_cmpoverlap(tiles[src].image, tiles[dst].image, d)) {
+          // Transposed: row = dst, bit = src
+          wfc__bitset_set(&allowed_tiles[d][dst * bitset_len], src);
+        }
       }
     }
   }
@@ -1265,18 +1395,20 @@ struct wfc *wfc_overlapping(int output_width,
   wfc->cells = NULL;
   wfc->tiles = NULL;
   wfc->props = NULL;
+  wfc->prop_pending = NULL;
+  wfc->active_cells = NULL;
+  wfc->cell_to_active = NULL;
   wfc->output_width = output_width;
   wfc->output_height = output_height;
   wfc->cell_cnt = output_width * output_height;
   wfc->tile_width = tile_width;
   wfc->tile_height = tile_height;
   wfc->tile_cnt = 0;
+  wfc->bitset_len = 0;
   wfc->expand_input = expand_input;
   wfc->xflip_tiles = xflip_tiles;
   wfc->yflip_tiles = yflip_tiles;
   wfc->rotate_tiles = rotate_tiles;
-  // use entropy
-  // ...
 
   wfc->tiles = wfc__create_tiles_overlapping(wfc->image,
                                              wfc->tile_width,
@@ -1288,6 +1420,8 @@ struct wfc *wfc_overlapping(int output_width,
                                              &wfc->tile_cnt);
   if (wfc->tiles == NULL)
     goto CLEANUP;
+
+  wfc->bitset_len = WFC_BITSET_LEN(wfc->tile_cnt);
 
   if (!wfc__create_allowed_tiles(wfc->allowed_tiles, wfc->tile_cnt)) {
       goto CLEANUP;
@@ -1302,7 +1436,17 @@ struct wfc *wfc_overlapping(int output_width,
   if (wfc->props == NULL)
     goto CLEANUP;
 
-  wfc_init(wfc);
+  wfc->prop_pending = calloc(wfc->cell_cnt * 4, sizeof(unsigned char));
+  if (wfc->prop_pending == NULL)
+    goto CLEANUP;
+
+  wfc->active_cells = malloc(sizeof(*wfc->active_cells) * wfc->cell_cnt);
+  if (wfc->active_cells == NULL)
+    goto CLEANUP;
+
+  wfc->cell_to_active = malloc(sizeof(*wfc->cell_to_active) * wfc->cell_cnt);
+  if (wfc->cell_to_active == NULL)
+    goto CLEANUP;
 
   return wfc;
 

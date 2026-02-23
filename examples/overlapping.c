@@ -6,6 +6,7 @@
 #define WFC_USE_STB
 #include "../wfc.h"
 #include <stdio.h>
+#include <time.h>
 
 int main(void)
 {
@@ -37,7 +38,7 @@ int main(void)
   }
 
   printf("Running ... \n");
-  if (!wfc_run(wfc, -1)) {
+  if (!wfc_run(wfc, (unsigned int)time(NULL))) {
     printf("Contradiction occurred, try again\n");
     wfc_img_destroy(input_image);
     wfc_destroy(wfc);

@@ -33,6 +33,7 @@
 //
 
 #include <stdio.h>
+#include <time.h>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image.h"
@@ -41,11 +42,11 @@
 #define WFC_USE_STB
 #include "wfc.h"
 
-void print_summary(struct wfc *wfc, const char *input_image, const char *output_image)
+void print_summary(struct wfc *wfc, const char *input_image, const char *output_image, unsigned int seed)
 {
   printf("\n");
   printf("method:               %s\n", wfc->method == WFC_METHOD_OVERLAPPING ? "overlapping" : "tiled");
-  printf("seed:                 %u\n\n", wfc->seed);
+  printf("seed:                 %u\n\n", seed);
   printf("input image:          %s\n", input_image);
   printf("input size:           %dx%d\n", wfc->image->width, wfc->image->height);
   printf("input components:     %d\n", wfc->image->component_cnt);
@@ -86,6 +87,7 @@ Following options are available:\n\n\
   -x 0|1, --xflip=0|1                 Add horizontal flips of all tiles\n\
   -y 0|1, --yflip=0|1                 Add vertical flips of all tiles\n\
   -r 0|1, --rotate=0|1                Add n*90deg rotations of all tiles\n\
+  -s num, --seed=num                   Random seed (default: time-based)\n\
 \n\
 ");
 
@@ -148,7 +150,7 @@ int arg_num(int argc, const char **argv, int *i, const char *short_name, const c
 }
 
 // Can terminate the program if the arguments are incorrect
-void read_args(int argc, const char **argv, enum wfc__method *method, const char **input, const char **output, int *width, int *height, int *tile_width, int *tile_height, int *expand_image, int *xflip_tiles, int *yflip_tiles, int *rotate_tiles)
+void read_args(int argc, const char **argv, enum wfc__method *method, const char **input, const char **output, int *width, int *height, int *tile_width, int *tile_height, int *expand_image, int *xflip_tiles, int *yflip_tiles, int *rotate_tiles, int *seed)
 {
   if (argc<2) {
     usage(argv[0], EXIT_FAILURE);
@@ -167,6 +169,7 @@ void read_args(int argc, const char **argv, enum wfc__method *method, const char
     if (arg_num(argc, argv, &i, "x", "xflip", xflip_tiles) == 0) continue;
     if (arg_num(argc, argv, &i, "y", "yflip", yflip_tiles) == 0) continue;
     if (arg_num(argc, argv, &i, "r", "rotate", rotate_tiles) == 0) continue;
+    if (arg_num(argc, argv, &i, "s", "seed", seed) == 0) continue;
 
     if (i != argc-2)
       usage(argv[0], EXIT_FAILURE);
@@ -194,6 +197,7 @@ int main(int argc, const char **argv)
   int xflip_tiles = 1;
   int yflip_tiles = 1;
   int rotate_tiles = 1;
+  int seed_arg = -1;
 
   read_args(argc,
             argv,
@@ -207,13 +211,19 @@ int main(int argc, const char **argv)
             &expand_input,
             &xflip_tiles,
             &yflip_tiles,
-            &rotate_tiles);
+            &rotate_tiles,
+            &seed_arg);
+
+  unsigned int seed = (seed_arg >= 0) ? (unsigned int)seed_arg : (unsigned int)time(NULL);
 
   struct wfc_image *image = wfc_img_load(input_filename);
   if (image == NULL) {
     p("Error: cannot load image: %s\n", input_filename);
     return EXIT_FAILURE;
   }
+
+  struct timespec t0, t1, t2;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
 
   struct wfc *wfc = wfc_overlapping(output_width,
                                     output_height,
@@ -230,13 +240,24 @@ int main(int argc, const char **argv)
     goto CLEANUP;
   }
 
-  /* wfc_export_tiles(wfc, "tmp"); */
-  print_summary(wfc, input_filename, output_filename);
+  clock_gettime(CLOCK_MONOTONIC, &t1);
 
-  if (!wfc_run(wfc, -1)) {
+  /* wfc_export_tiles(wfc, "tmp"); */
+  print_summary(wfc, input_filename, output_filename, seed);
+
+  if (!wfc_run(wfc, seed)) {
     p("Contradiction occurred, try again\n");
     goto CLEANUP;
   }
+
+  clock_gettime(CLOCK_MONOTONIC, &t2);
+
+  double setup_ms = (t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) / 1e6;
+  double solve_ms = (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_nsec - t1.tv_nsec) / 1e6;
+  printf("setup:                %.1f ms\n", setup_ms);
+  printf("solve:                %.1f ms\n", solve_ms);
+  printf("total:                %.1f ms\n", setup_ms + solve_ms);
+  printf("\n");
 
   if (!wfc_export(wfc, output_filename)) {
     p("Error: cannot save image: %s\n", output_filename);
