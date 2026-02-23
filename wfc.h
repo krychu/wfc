@@ -4,9 +4,9 @@
 //
 // Author:  Krystian Samp (samp.krystian at gmail.com)
 // License: MIT
-// Version: 0.7
+// Version: 1.0
 //
-// This is an early version that supports the overlapping WFC method.
+// Supports the overlapping WFC method.
 // All feedback is very welcome and best sent by email. Thanks.
 //
 //

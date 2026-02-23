@@ -3,9 +3,9 @@
 Single-file Wave Function Collapse library in C, plus a command-line tool
 
 - License: MIT
-- Version: 0.7
+- Version: 1.0
 
-This is an early version that supports the overlapping WFC method.
+Supports the overlapping WFC method.
 The method takes a small input image and generates a larger output image which is
 locally similar to the input image. A few examples of
 input/output pairs:
@@ -165,8 +165,6 @@ Basic usage:
 
 Thanks for using wfc. If you find any bugs, have questions, or feedback please
 let me know. Also, if you'd like to share your works it's very appreciated.
-
-Some optimization approaches were informed by Vladimir Pleskonjic's [libwfc](https://github.com/vplesko/libwfc) and his [devlog](https://vplesko.com/posts/wfc/devlog_4.html).
 
 samp.krystian at gmail.com
 
